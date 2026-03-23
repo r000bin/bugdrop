@@ -80,10 +80,10 @@ api.post('/feedback', async (c) => {
     return c.json({ error: 'Invalid JSON' }, 400);
   }
 
-  // Validate required fields
-  if (!payload.repo || !payload.title || !payload.description) {
+  // Validate required fields (description is optional — many reports are title + screenshot)
+  if (!payload.repo || !payload.title) {
     return c.json({
-      error: 'Missing required fields: repo, title, description',
+      error: 'Missing required fields: repo, title',
     }, 400);
   }
 
@@ -200,9 +200,11 @@ function formatIssueBody(
   }
 
   // Description
-  sections.push('## Description');
-  sections.push(payload.description);
-  sections.push('');
+  if (payload.description) {
+    sections.push('## Description');
+    sections.push(payload.description);
+    sections.push('');
+  }
 
   // Screenshot - embedded as base64 data URL
   if (screenshotDataUrl) {
