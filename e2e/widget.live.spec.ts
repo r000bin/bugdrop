@@ -96,18 +96,19 @@ test.describe('Welcome Flow (Live)', () => {
 
 test.describe('Cross-Origin API (Live)', () => {
   test('widget derives API URL correctly from cross-origin script src', async ({ page }) => {
-    await page.goto('/');
-
-    // Wait for widget to load
-    const host = page.locator('#bugdrop-host');
-    await expect(host).toBeAttached({ timeout: 10_000 });
-
+    // Register listener before navigation to capture all API calls
     const apiCalls: string[] = [];
     page.on('request', (req) => {
       if (req.url().includes('/api/')) {
         apiCalls.push(req.url());
       }
     });
+
+    await page.goto('/');
+
+    // Wait for widget to load
+    const host = page.locator('#bugdrop-host');
+    await expect(host).toBeAttached({ timeout: 10_000 });
 
     // Open the modal to trigger the installation check
     const button = page.locator('#bugdrop-host').locator('css=.bd-trigger');
