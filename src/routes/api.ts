@@ -268,7 +268,7 @@ function formatIssueBody(payload: FeedbackPayload, screenshotDataUrl?: string): 
   sections.push('</details>');
   sections.push('');
   sections.push('---');
-  sections.push('*Submitted via [BugDrop](https://github.com/neonwatty/bugdrop)*');
+  sections.push('*Submitted via [BugDrop](https://github.com/mean-weasel/bugdrop)*');
 
   return sections.join('\n');
 }
