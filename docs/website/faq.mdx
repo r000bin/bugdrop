@@ -206,6 +206,10 @@ If issues are created but without screenshots:
 2. **Check CSP** -- The html2canvas library is loaded from `cdn.jsdelivr.net`. Make sure it is allowed by your Content Security Policy.
 3. **Cross-origin content** -- html2canvas cannot capture cross-origin iframes or images loaded without CORS headers. These elements may appear blank in the screenshot.
 
+### Can I use BugDrop on a static site?
+
+Yes. BugDrop works on any website that can load a script tag, including static sites built with Hugo, Jekyll, Eleventy, Astro, or plain HTML. Since the widget is entirely client-side and communicates with the BugDrop API, there are no server-side requirements for the host site.
+
 ## Still Have Questions?
 
 - Browse the [GitHub Issues](https://github.com/mean-weasel/bugdrop/issues) for existing discussions
