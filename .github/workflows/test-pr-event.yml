@@ -1,0 +1,9 @@
+name: Test PR Event
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "pull_request event fired successfully"
