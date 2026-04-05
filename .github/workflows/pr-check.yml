@@ -1,0 +1,9 @@
+name: PR Check
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "pull_request event works"
