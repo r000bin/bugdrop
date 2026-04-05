@@ -1,6 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8787';
+const rawBaseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8787';
+// Append Vercel bypass query param for protected preview deployments
+const baseURL =
+  process.env.VERCEL_AUTOMATION_BYPASS_SECRET && process.env.PLAYWRIGHT_BASE_URL
+    ? `${rawBaseURL}?x-vercel-protection-bypass=${process.env.VERCEL_AUTOMATION_BYPASS_SECRET}&x-vercel-set-bypass-cookie=samesitenone`
+    : rawBaseURL;
 
 export default defineConfig({
   testDir: './e2e',
