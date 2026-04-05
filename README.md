@@ -1,4 +1,5 @@
 # BugDrop 🐛
+
 <!-- Phase 3 Step 7: full pipeline test -->
 
 [![CI](https://github.com/mean-weasel/bugdrop/actions/workflows/ci.yml/badge.svg)](https://github.com/mean-weasel/bugdrop/actions/workflows/ci.yml)
