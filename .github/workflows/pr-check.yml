@@ -122,7 +122,6 @@ jobs:
     uses: ./.github/workflows/live-tests.yml
     with:
       target: preview
-    secrets: inherit
     continue-on-error: true
 
   # Automated release via semantic-release (only on push to main)
