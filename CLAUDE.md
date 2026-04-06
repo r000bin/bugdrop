@@ -41,7 +41,10 @@ Invoke these skills at the appropriate moments — don't skip them:
 - **`/superpowers`** — When unsure which skill applies. The meta-skill that routes to the
   right workflow.
 
-### Test-Driven When Possible
+### Generate Tests with `/gen-test`
+
+Use `/gen-test <file>` to generate tests following project conventions. The skill
+includes example patterns for both Vitest (unit) and Playwright (E2E).
 
 For bug fixes: write a failing test first that reproduces the bug, then fix it.
 For new features: consider writing the test interface first to drive the API design.
@@ -134,6 +137,13 @@ process the feedback systematically and address each point.
 - Live Preview Tests
 
 The merge queue runs a subset of these. Don't bypass CI — fix failures at the source.
+
+---
+
+## Onboarding
+
+Run `/setup-dev` to set up the development environment. It checks prerequisites,
+installs dependencies, builds the widget, and runs all tests to verify the setup.
 
 ---
 
