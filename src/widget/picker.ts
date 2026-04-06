@@ -1,4 +1,4 @@
-interface PickerStyle {
+export interface PickerStyle {
   accentColor?: string;
   font?: string;
   radius?: string;
