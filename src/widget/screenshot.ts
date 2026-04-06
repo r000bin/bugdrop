@@ -39,7 +39,6 @@ export async function captureScreenshot(
   const target = element || document.body;
   const isFullPage = !element;
 
-  // For full-page captures on complex DOMs, reduce pixelRatio to prevent OOM crashes
   const pixelRatio = getPixelRatio(isFullPage, screenshotScale);
 
   const capturePromise = lib.toPng(target as HTMLElement, {
