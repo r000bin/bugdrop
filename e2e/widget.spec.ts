@@ -366,7 +366,7 @@ test.describe('Widget Interaction', () => {
     await expect(screenshotCheckbox).toBeChecked();
   });
 
-  test('version number appears in modal footer', async ({ page }) => {
+  test('version number appears on welcome screen but not on form', async ({ page }) => {
     await page.route('**/api/check/**', async route => {
       await route.fulfill({
         status: 200,
@@ -377,15 +377,25 @@ test.describe('Widget Interaction', () => {
 
     await page.goto('/test/');
 
-    const button = page.locator('#bugdrop-host').locator('css=.bd-trigger');
+    const host = page.locator('#bugdrop-host');
+    const button = host.locator('css=.bd-trigger');
     await expect(button).toBeVisible({ timeout: 5000 });
     await button.click();
 
-    // Version should appear in the modal
-    const versionEl = page.locator('#bugdrop-host').locator('css=.bd-version');
+    // Version should appear on the welcome screen
+    const versionEl = host.locator('css=.bd-version');
     await expect(versionEl).toBeVisible({ timeout: 5000 });
     const versionText = await versionEl.textContent();
     expect(versionText).toMatch(/^BugDrop v/);
+
+    // Advance to feedback form
+    const getStartedBtn = host.locator('css=[data-action="continue"]');
+    await getStartedBtn.click();
+
+    // Version should NOT appear on the form screen
+    const titleInput = host.locator('css=#title');
+    await expect(titleInput).toBeVisible({ timeout: 5000 });
+    await expect(versionEl).not.toBeVisible();
   });
 });
 
