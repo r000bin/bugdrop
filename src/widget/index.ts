@@ -1,5 +1,6 @@
-import { captureScreenshot } from './screenshot';
+import { captureScreenshot, cropScreenshot, getPixelRatio } from './screenshot';
 import { createElementPicker } from './picker';
+import { createAreaPicker } from './area-picker';
 import { createAnnotator } from './annotator';
 import { injectStyles, createModal, showSuccessModal } from './ui';
 
@@ -613,6 +614,24 @@ async function openFeedbackFlow(
         screenshot = await captureWithLoading(root, element, config.screenshotScale);
         elementSelector = getElementSelector(element);
       }
+    } else if (screenshotChoice === 'area') {
+      const rect = await createAreaPicker({
+        accentColor: config.accentColor,
+        font: config.font,
+        radius: config.radius,
+        borderWidth: config.borderWidth,
+        bgColor: config.bgColor,
+        textColor: config.textColor,
+        borderColor: config.borderColor,
+        theme: config.theme,
+      });
+      if (rect) {
+        const fullPage = await captureWithLoading(root, undefined, config.screenshotScale);
+        if (fullPage) {
+          const pixelRatio = getPixelRatio(true, config.screenshotScale);
+          screenshot = await cropScreenshot(fullPage, rect, pixelRatio);
+        }
+      }
     }
 
     // Step 4: Annotate (if screenshot exists)
@@ -944,7 +963,9 @@ function showFeedbackFormWithScreenshotOption(
   });
 }
 
-function showScreenshotOptions(root: HTMLElement): Promise<'skip' | 'capture' | 'element'> {
+function showScreenshotOptions(
+  root: HTMLElement
+): Promise<'skip' | 'capture' | 'element' | 'area'> {
   return new Promise(resolve => {
     const modal = createModal(
       root,
@@ -954,6 +975,7 @@ function showScreenshotOptions(root: HTMLElement): Promise<'skip' | 'capture' | 
         <div class="bd-actions" style="flex-wrap: wrap; gap: 8px;">
           <button class="bd-btn bd-btn-secondary" data-action="skip">Skip Screenshot</button>
           <button class="bd-btn bd-btn-secondary" data-action="element">Select Element</button>
+          <button class="bd-btn bd-btn-secondary" data-action="area">Select Area</button>
           <button class="bd-btn bd-btn-primary" data-action="capture">Full Page</button>
         </div>
       `
@@ -962,6 +984,7 @@ function showScreenshotOptions(root: HTMLElement): Promise<'skip' | 'capture' | 
     const closeBtn = modal.querySelector('.bd-close') as HTMLElement;
     const skipBtn = modal.querySelector('[data-action="skip"]') as HTMLElement;
     const elementBtn = modal.querySelector('[data-action="element"]') as HTMLElement;
+    const areaBtn = modal.querySelector('[data-action="area"]') as HTMLElement;
     const captureBtn = modal.querySelector('[data-action="capture"]') as HTMLElement;
 
     closeBtn?.addEventListener('click', () => {
@@ -977,6 +1000,11 @@ function showScreenshotOptions(root: HTMLElement): Promise<'skip' | 'capture' | 
     elementBtn?.addEventListener('click', () => {
       modal.remove();
       resolve('element');
+    });
+
+    areaBtn?.addEventListener('click', () => {
+      modal.remove();
+      resolve('area');
     });
 
     captureBtn?.addEventListener('click', () => {
