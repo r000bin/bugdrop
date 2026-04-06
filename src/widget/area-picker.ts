@@ -1,4 +1,5 @@
 import type { PickerStyle } from './picker';
+import { resolvePickerStyle } from './picker';
 
 const MIN_SELECTION_SIZE = 10;
 
@@ -11,17 +12,8 @@ export function createAreaPicker(style?: PickerStyle): Promise<DOMRect | null> {
 }
 
 function startAreaPicker(resolve: (rect: DOMRect | null) => void, style?: PickerStyle): void {
-  const isDark = style?.theme === 'dark';
-  const accent = style?.accentColor || '#14b8a6';
-  const fontFamily =
-    style?.font === 'inherit'
-      ? 'system-ui, sans-serif'
-      : style?.font || "'Space Grotesk', system-ui, sans-serif";
-  const radius = style?.radius !== undefined ? `${style.radius}px` : '6px';
-  const bw = style?.borderWidth || '3';
-  const tooltipBg = style?.bgColor || (isDark ? '#0f172a' : '#1a1a1a');
-  const tooltipText = style?.textColor || '#f1f5f9';
-  const tooltipBorder = style?.borderColor || (isDark ? '#334155' : '#333');
+  const { accent, fontFamily, radius, bw, tooltipBg, tooltipText, tooltipBorder } =
+    resolvePickerStyle(style);
 
   // Full-screen dimming overlay
   const overlay = document.createElement('div');
@@ -126,8 +118,8 @@ function startAreaPicker(resolve: (rect: DOMRect | null) => void, style?: Picker
       return;
     }
 
-    const left = Math.min(startX, e.clientX);
-    const top = Math.min(startY, e.clientY);
+    const left = Math.min(startX, e.clientX) + window.scrollX;
+    const top = Math.min(startY, e.clientY) + window.scrollY;
 
     cleanup();
     resolve(new DOMRect(left, top, width, height));

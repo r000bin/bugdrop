@@ -596,39 +596,31 @@ async function openFeedbackFlow(
   // Step 3: Screenshot flow (if user opted in)
   if (formResult.includeScreenshot) {
     const screenshotChoice = await showScreenshotOptions(root);
+    const pickerStyle = {
+      accentColor: config.accentColor,
+      font: config.font,
+      radius: config.radius,
+      borderWidth: config.borderWidth,
+      bgColor: config.bgColor,
+      textColor: config.textColor,
+      borderColor: config.borderColor,
+      theme: config.theme,
+    };
 
     if (screenshotChoice === 'capture') {
       screenshot = await captureWithLoading(root, undefined, config.screenshotScale);
     } else if (screenshotChoice === 'element') {
-      const element = await createElementPicker({
-        accentColor: config.accentColor,
-        font: config.font,
-        radius: config.radius,
-        borderWidth: config.borderWidth,
-        bgColor: config.bgColor,
-        textColor: config.textColor,
-        borderColor: config.borderColor,
-        theme: config.theme,
-      });
+      const element = await createElementPicker(pickerStyle);
       if (element) {
         screenshot = await captureWithLoading(root, element, config.screenshotScale);
         elementSelector = getElementSelector(element);
       }
     } else if (screenshotChoice === 'area') {
-      const rect = await createAreaPicker({
-        accentColor: config.accentColor,
-        font: config.font,
-        radius: config.radius,
-        borderWidth: config.borderWidth,
-        bgColor: config.bgColor,
-        textColor: config.textColor,
-        borderColor: config.borderColor,
-        theme: config.theme,
-      });
+      const rect = await createAreaPicker(pickerStyle);
       if (rect) {
+        const pixelRatio = getPixelRatio(true, config.screenshotScale);
         const fullPage = await captureWithLoading(root, undefined, config.screenshotScale);
         if (fullPage) {
-          const pixelRatio = getPixelRatio(true, config.screenshotScale);
           screenshot = await cropScreenshot(fullPage, rect, pixelRatio);
         }
       }
