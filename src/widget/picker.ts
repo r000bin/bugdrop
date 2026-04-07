@@ -9,7 +9,7 @@ export interface PickerStyle {
   theme?: string;
 }
 
-export interface ResolvedPickerStyle {
+interface ResolvedPickerStyle {
   accent: string;
   fontFamily: string;
   radius: string;
