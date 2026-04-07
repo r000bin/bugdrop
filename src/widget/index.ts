@@ -595,9 +595,7 @@ async function openFeedbackFlow(
 
   // Step 3: Screenshot flow (if user opted in)
   if (formResult.includeScreenshot) {
-    let retake = true;
-    while (retake) {
-      retake = false;
+    while (true) {
       screenshot = null;
       elementSelector = null;
 
@@ -635,12 +633,10 @@ async function openFeedbackFlow(
       // Step 4: Annotate (if screenshot exists)
       if (screenshot) {
         const result = await showAnnotationStep(root, screenshot, config);
-        if (result === 'retake') {
-          retake = true;
-        } else {
-          screenshot = result;
-        }
+        if (result === 'retake') continue;
+        screenshot = result;
       }
+      break;
     }
   }
 
