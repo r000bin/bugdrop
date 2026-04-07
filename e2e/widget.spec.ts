@@ -452,6 +452,62 @@ test.describe('Widget Interaction', () => {
     // Overlay should be removed
     await expect(overlay).not.toBeVisible({ timeout: 3000 });
   });
+
+  test('retake button on annotation step returns to screenshot options', async ({ page }) => {
+    await page.route('**/api/check/**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ installed: true }),
+      });
+    });
+
+    await page.goto('/test/');
+
+    const host = page.locator('#bugdrop-host');
+    const button = host.locator('css=.bd-trigger');
+    await expect(button).toBeVisible({ timeout: 5000 });
+    await button.click();
+
+    // Click through welcome
+    const getStartedBtn = host.locator('css=[data-action="continue"]');
+    await expect(getStartedBtn).toBeVisible({ timeout: 5000 });
+    await getStartedBtn.click();
+
+    // Fill form and submit with screenshot
+    const titleInput = host.locator('css=#title');
+    await expect(titleInput).toBeVisible({ timeout: 5000 });
+    await titleInput.fill('Test retake');
+
+    const screenshotCheckbox = host.locator('css=#include-screenshot');
+    await screenshotCheckbox.check();
+
+    const submitBtn = host.locator('css=#submit-btn');
+    await submitBtn.click();
+
+    // Click "Full Page" to capture
+    const fullPageBtn = host.locator('css=[data-action="capture"]');
+    await expect(fullPageBtn).toBeVisible({ timeout: 5000 });
+    await fullPageBtn.click();
+
+    // Wait for annotation step to appear (screenshot capture can take several seconds)
+    const retakeBtn = host.locator('css=[data-action="retake"]');
+    await expect(retakeBtn).toBeVisible({ timeout: 15000 });
+
+    // Click Retake
+    await retakeBtn.click();
+
+    // Should be back at screenshot options
+    await expect(fullPageBtn).toBeVisible({ timeout: 5000 });
+
+    // All 4 screenshot options should be available
+    const skipBtn = host.locator('css=[data-action="skip"]');
+    const elementBtn = host.locator('css=[data-action="element"]');
+    const areaBtn = host.locator('css=[data-action="area"]');
+    await expect(skipBtn).toBeVisible();
+    await expect(elementBtn).toBeVisible();
+    await expect(areaBtn).toBeVisible();
+  });
 });
 
 test.describe('API Endpoints', () => {

@@ -595,40 +595,48 @@ async function openFeedbackFlow(
 
   // Step 3: Screenshot flow (if user opted in)
   if (formResult.includeScreenshot) {
-    const screenshotChoice = await showScreenshotOptions(root);
-    const pickerStyle = {
-      accentColor: config.accentColor,
-      font: config.font,
-      radius: config.radius,
-      borderWidth: config.borderWidth,
-      bgColor: config.bgColor,
-      textColor: config.textColor,
-      borderColor: config.borderColor,
-      theme: config.theme,
-    };
+    while (true) {
+      screenshot = null;
+      elementSelector = null;
 
-    if (screenshotChoice === 'capture') {
-      screenshot = await captureWithLoading(root, undefined, config.screenshotScale);
-    } else if (screenshotChoice === 'element') {
-      const element = await createElementPicker(pickerStyle);
-      if (element) {
-        screenshot = await captureWithLoading(root, element, config.screenshotScale);
-        elementSelector = getElementSelector(element);
-      }
-    } else if (screenshotChoice === 'area') {
-      const rect = await createAreaPicker(pickerStyle);
-      if (rect) {
-        const pixelRatio = getPixelRatio(true, config.screenshotScale);
-        const fullPage = await captureWithLoading(root, undefined, config.screenshotScale);
-        if (fullPage) {
-          screenshot = await cropScreenshot(fullPage, rect, pixelRatio);
+      const screenshotChoice = await showScreenshotOptions(root);
+      const pickerStyle = {
+        accentColor: config.accentColor,
+        font: config.font,
+        radius: config.radius,
+        borderWidth: config.borderWidth,
+        bgColor: config.bgColor,
+        textColor: config.textColor,
+        borderColor: config.borderColor,
+        theme: config.theme,
+      };
+
+      if (screenshotChoice === 'capture') {
+        screenshot = await captureWithLoading(root, undefined, config.screenshotScale);
+      } else if (screenshotChoice === 'element') {
+        const element = await createElementPicker(pickerStyle);
+        if (element) {
+          screenshot = await captureWithLoading(root, element, config.screenshotScale);
+          elementSelector = getElementSelector(element);
+        }
+      } else if (screenshotChoice === 'area') {
+        const rect = await createAreaPicker(pickerStyle);
+        if (rect) {
+          const pixelRatio = getPixelRatio(true, config.screenshotScale);
+          const fullPage = await captureWithLoading(root, undefined, config.screenshotScale);
+          if (fullPage) {
+            screenshot = await cropScreenshot(fullPage, rect, pixelRatio);
+          }
         }
       }
-    }
 
-    // Step 4: Annotate (if screenshot exists)
-    if (screenshot) {
-      screenshot = await showAnnotationStep(root, screenshot, config);
+      // Step 4: Annotate (if screenshot exists)
+      if (screenshot) {
+        const result = await showAnnotationStep(root, screenshot, config);
+        if (result === 'retake') continue;
+        screenshot = result;
+      }
+      break;
     }
   }
 
@@ -1010,7 +1018,7 @@ function showAnnotationStep(
   root: HTMLElement,
   screenshot: string,
   config?: WidgetConfig
-): Promise<string> {
+): Promise<string | 'retake'> {
   return new Promise(resolve => {
     const modal = createModal(
       root,
@@ -1024,6 +1032,7 @@ function showAnnotationStep(
         </div>
         <div id="annotation-canvas"></div>
         <div class="bd-actions">
+          <button class="bd-btn bd-btn-secondary" data-action="retake">Retake</button>
           <button class="bd-btn bd-btn-secondary" data-action="skip">Skip Annotations</button>
           <button class="bd-btn bd-btn-primary" data-action="done">Done</button>
         </div>
@@ -1052,6 +1061,7 @@ function showAnnotationStep(
 
     // Action buttons
     const closeBtn = modal.querySelector('.bd-close') as HTMLElement;
+    const retakeBtn = modal.querySelector('[data-action="retake"]') as HTMLElement;
     const skipBtn = modal.querySelector('[data-action="skip"]') as HTMLElement;
     const doneBtn = modal.querySelector('[data-action="done"]') as HTMLElement;
 
@@ -1059,6 +1069,12 @@ function showAnnotationStep(
       annotator.destroy();
       modal.remove();
       resolve(screenshot);
+    });
+
+    retakeBtn?.addEventListener('click', () => {
+      annotator.destroy();
+      modal.remove();
+      resolve('retake');
     });
 
     skipBtn?.addEventListener('click', () => {
