@@ -40,12 +40,12 @@ api.use('*', async (c, next) => {
   return corsMiddleware(c, next);
 });
 
-// Rate limit: 10 requests per 15 minutes per IP
+// Rate limit: 20 requests per 15 minutes per IP
 api.use(
   '/feedback',
   rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    maxRequests: 10,
+    maxRequests: 20,
     keyPrefix: 'ip',
   })
 );
