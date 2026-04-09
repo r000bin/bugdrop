@@ -73,8 +73,9 @@ for (const nodeCount of NODE_COUNTS) {
       waitUntil: 'networkidle',
     });
 
-    // Verify actual node count
+    // Verify actual node count matches what was requested
     const actualNodes = await page.evaluate(() => document.body.querySelectorAll('*').length);
+    expect(actualNodes).toBeGreaterThanOrEqual(nodeCount);
 
     // Drive the widget to Full Page capture
     const startTime = await navigateToFullPageCapture(page);
@@ -85,11 +86,9 @@ for (const nodeCount of NODE_COUNTS) {
 
     try {
       // Wait for either success (annotation step) or failure (error modal)
-      // Use 60s inner timeout — Playwright's 90s timeout is the outer safety net
-      await Promise.race([
-        annotationCanvas.waitFor({ state: 'visible', timeout: 60_000 }),
-        errorMessage.waitFor({ state: 'visible', timeout: 60_000 }),
-      ]);
+      // locator.or() avoids dangling promises that Promise.race would leave
+      const outcome = annotationCanvas.or(errorMessage);
+      await outcome.waitFor({ state: 'visible', timeout: 60_000 });
 
       const durationMs = Date.now() - startTime;
       const succeeded = await annotationCanvas.isVisible();
@@ -116,10 +115,11 @@ for (const nodeCount of NODE_COUNTS) {
 test.afterAll(() => {
   if (results.length === 0) return;
 
+  const cpuInfo = cpus();
   const machine = {
     os: `${platform()} ${release()} (${arch()})`,
-    cpu: cpus()[0]?.model || 'unknown',
-    cores: cpus().length,
+    cpu: cpuInfo[0]?.model || 'unknown',
+    cores: cpuInfo.length,
     ramGb: Math.round(totalmem() / 1024 / 1024 / 1024),
   };
 
@@ -130,23 +130,23 @@ test.afterAll(() => {
   );
   console.log('| Nodes (target) | Nodes (actual) | Duration (ms) | Outcome |');
   console.log('|---------------:|---------------:|--------------:|---------|');
-  console.log(
-    '*Nodes (target) = requested via ?nodes=N; Nodes (actual) = total DOM nodes counted after generation*\n'
-  );
   for (const r of results) {
     const flag = r.outcome === 'timeout' ? ' ⚠️' : r.outcome === 'error' ? ' ❌' : '';
     console.log(`| ${r.nodes} | ${r.actualNodes} | ${r.durationMs} | ${r.outcome}${flag} |`);
   }
+  console.log(
+    '\n*Nodes (target) = requested via ?nodes=N; Nodes (actual) = total DOM nodes counted after generation*'
+  );
   console.log('');
 
   // Save JSON
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const now = new Date().toISOString();
   const resultsDir = join(__dirname, 'results');
   mkdirSync(resultsDir, { recursive: true });
-  const outPath = join(resultsDir, `screenshot-threshold-${timestamp}.json`);
+  const outPath = join(resultsDir, `screenshot-threshold-${now.replace(/[:.]/g, '-')}.json`);
 
   const output = {
-    timestamp: new Date().toISOString(),
+    timestamp: now,
     machine,
     results,
   };
