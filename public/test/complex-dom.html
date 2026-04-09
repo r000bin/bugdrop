@@ -7,6 +7,7 @@
   <style>
     body { font-family: sans-serif; background: #1a1b26; color: #c0caf5; padding: 2rem; }
     .node { padding: 2px 4px; margin: 1px; font-size: 10px; border: 1px solid #3b4261; display: inline-block; }
+    .group { margin: 4px 0; }
     #node-count { color: #9ece6a; font-weight: bold; }
   </style>
 </head>
@@ -16,15 +17,27 @@
   <div id="complex-root"></div>
 
   <script>
-    // Generate enough nodes to exceed the DOM_COMPLEXITY_THRESHOLD (3000)
-    const TARGET_NODES = 4000;
+    // Read target node count from query param, default to 4000
+    const params = new URLSearchParams(window.location.search);
+    const TARGET_NODES = parseInt(params.get('nodes') || '4000', 10);
+    const CHILDREN_PER_GROUP = 10;
     const root = document.getElementById('complex-root');
-    for (let i = 0; i < TARGET_NODES; i++) {
-      const el = document.createElement('span');
-      el.className = 'node';
-      el.textContent = i;
-      root.appendChild(el);
+
+    let created = 0;
+    while (created < TARGET_NODES) {
+      const group = document.createElement('div');
+      group.className = 'group';
+      const groupSize = Math.min(CHILDREN_PER_GROUP, TARGET_NODES - created);
+      for (let i = 0; i < groupSize; i++) {
+        const el = document.createElement('span');
+        el.className = 'node';
+        el.textContent = `Item ${created + i}`;
+        group.appendChild(el);
+        created++;
+      }
+      root.appendChild(group);
     }
+
     document.getElementById('node-count').textContent =
       document.body.querySelectorAll('*').length;
   </script>

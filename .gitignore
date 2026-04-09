@@ -48,3 +48,6 @@ test-results/
 
 # Worktrees
 .worktrees/
+
+# Benchmark results (machine-specific)
+benchmarks/results/*.json
