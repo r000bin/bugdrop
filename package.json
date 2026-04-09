@@ -25,6 +25,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "benchmark:screenshot": "npx playwright test --config benchmarks/playwright.config.ts",
     "typecheck": "tsc --noEmit && tsc --project tsconfig.widget.json --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
