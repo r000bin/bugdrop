@@ -1,12 +1,11 @@
 // src/widget/theme.ts
 
 export type ThemeMode = 'light' | 'dark' | 'auto';
-export type ResolvedTheme = 'light' | 'dark';
+type ResolvedTheme = 'light' | 'dark';
 
-// Forward-declared so this module doesn't import from ui.ts (avoids cycle).
-// The actual WidgetConfig type is defined in index.ts and ui.ts; for the
-// custom-styles helper we only need the subset of fields we consume.
-export interface ThemeConfigSlice {
+// Internal structural slice of WidgetConfig — only the fields applyCustomStyles
+// reads. Declared locally to avoid an import cycle with ui.ts / index.ts.
+interface ThemeConfigSlice {
   accentColor?: string;
   bgColor?: string;
   textColor?: string;
