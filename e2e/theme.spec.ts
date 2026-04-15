@@ -76,4 +76,27 @@ test.describe('Runtime theme switching', () => {
     expect(await rootClassList(page)).not.toContain('bd-dark');
     expect(warnings.some(w => w.includes('[BugDrop] Invalid theme'))).toBe(true);
   });
+
+  test('auto mode follows OS theme changes via page.emulateMedia', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await gotoWidget(page, { theme: 'auto' });
+    expect(await rootClassList(page)).not.toContain('bd-dark');
+
+    await page.emulateMedia({ colorScheme: 'dark' });
+    // Give the matchMedia change event a tick to propagate
+    await page.waitForFunction(() => {
+      const host = document.getElementById('bugdrop-host') as HTMLElement | null;
+      const root = host?.shadowRoot?.querySelector('.bd-root') as HTMLElement | null;
+      return root?.classList.contains('bd-dark') === true;
+    });
+    expect(await rootClassList(page)).toContain('bd-dark');
+  });
+
+  test('setTheme("auto") resolves to current emulated OS theme', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await gotoWidget(page, { theme: 'light' });
+    expect(await rootClassList(page)).not.toContain('bd-dark');
+    await page.evaluate(() => (window as BugDropWindow).BugDrop!.setTheme('auto'));
+    expect(await rootClassList(page)).toContain('bd-dark');
+  });
 });
