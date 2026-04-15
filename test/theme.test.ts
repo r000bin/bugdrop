@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // test/theme.test.ts
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { getSystemTheme, isValidTheme, resolveTheme } from '../src/widget/theme';
+import { applyThemeClass, getSystemTheme, isValidTheme, resolveTheme } from '../src/widget/theme';
 
 describe('theme module', () => {
   it('module loads', () => {
@@ -104,5 +104,39 @@ describe('resolveTheme', () => {
 
   it('passes "light" for explicit modes through even when getSystem would say dark', () => {
     expect(resolveTheme('light', () => 'dark')).toBe('light');
+  });
+});
+
+describe('applyThemeClass', () => {
+  it('adds bd-dark when resolved is dark', () => {
+    const root = document.createElement('div');
+    root.className = 'bd-root';
+    applyThemeClass(root, 'dark');
+    expect(root.classList.contains('bd-dark')).toBe(true);
+    expect(root.classList.contains('bd-root')).toBe(true);
+  });
+
+  it('removes bd-dark when resolved is light', () => {
+    const root = document.createElement('div');
+    root.className = 'bd-root bd-dark';
+    applyThemeClass(root, 'light');
+    expect(root.classList.contains('bd-dark')).toBe(false);
+    expect(root.classList.contains('bd-root')).toBe(true);
+  });
+
+  it('is idempotent (dark twice)', () => {
+    const root = document.createElement('div');
+    root.className = 'bd-root';
+    applyThemeClass(root, 'dark');
+    applyThemeClass(root, 'dark');
+    expect(root.classList.contains('bd-dark')).toBe(true);
+  });
+
+  it('is idempotent (light twice)', () => {
+    const root = document.createElement('div');
+    root.className = 'bd-root';
+    applyThemeClass(root, 'light');
+    applyThemeClass(root, 'light');
+    expect(root.classList.contains('bd-dark')).toBe(false);
   });
 });

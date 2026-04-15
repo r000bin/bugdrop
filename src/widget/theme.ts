@@ -39,7 +39,7 @@ export function isValidTheme(value: unknown): value is ThemeMode {
 }
 
 export function applyThemeClass(root: HTMLElement, resolved: ResolvedTheme): void {
-  throw new Error('not implemented');
+  root.classList.toggle('bd-dark', resolved === 'dark');
 }
 
 export function applyCustomStyles(
