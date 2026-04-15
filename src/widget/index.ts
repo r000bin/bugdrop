@@ -14,7 +14,6 @@ import {
   resolveTheme,
   applyThemeClass,
   applyCustomStyles,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- wired up in Task 11
   attachSystemThemeListener,
   isValidTheme,
   type ThemeMode,
@@ -173,7 +172,6 @@ let _pullTab: HTMLElement | null = null;
 let _isModalOpen = false;
 let _widgetConfig: WidgetConfig | null = null;
 let _currentMode: ThemeMode = 'auto';
-// eslint-disable-next-line prefer-const -- reassigned in Task 11 when attachSystemThemeListener is wired up
 let _detachSystemListener: (() => void) | null = null;
 
 // Helper to check if button was dismissed
@@ -527,6 +525,14 @@ function exposeBugDropAPI(root: HTMLElement, config: WidgetConfig) {
       applyCustomStyles(root, config, resolved);
     },
   };
+
+  // Fix for data-theme="auto" not following OS changes after init.
+  // One persistent listener gated by _currentMode === 'auto'.
+  _detachSystemListener = attachSystemThemeListener(resolved => {
+    if (_currentMode !== 'auto') return;
+    applyThemeClass(root, resolved);
+    applyCustomStyles(root, config, resolved);
+  });
 }
 
 // Helper to create the trigger button (used by show() API and pull tab restore)
