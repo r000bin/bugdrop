@@ -10,6 +10,15 @@ import { createElementPicker } from './picker';
 import { createAreaPicker } from './area-picker';
 import { createAnnotator } from './annotator';
 import { injectStyles, createModal, showSuccessModal } from './ui';
+import {
+  resolveTheme,
+  applyThemeClass,
+  applyCustomStyles,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- wired up in Task 11
+  attachSystemThemeListener,
+  isValidTheme,
+  type ThemeMode,
+} from './theme';
 
 interface WidgetConfig {
   repo: string;
@@ -56,6 +65,7 @@ interface BugDropAPI {
   show: () => void;
   isOpen: () => boolean;
   isButtonVisible: () => boolean;
+  setTheme: (mode: ThemeMode) => void;
 }
 
 // Declare global BugDrop API
@@ -162,6 +172,9 @@ let _triggerButton: HTMLElement | null = null;
 let _pullTab: HTMLElement | null = null;
 let _isModalOpen = false;
 let _widgetConfig: WidgetConfig | null = null;
+let _currentMode: ThemeMode = 'auto';
+// eslint-disable-next-line prefer-const -- reassigned in Task 11 when attachSystemThemeListener is wired up
+let _detachSystemListener: (() => void) | null = null;
 
 // Helper to check if button was dismissed
 function isButtonDismissed(dismissDuration?: number): boolean {
@@ -276,6 +289,7 @@ if (!config.repo) {
     `[BugDrop] Invalid data-repo format "${config.repo}". Expected "owner/repo" (e.g., "octocat/hello-world").`
   );
 } else {
+  _currentMode = config.theme;
   initWidget(config);
 }
 
@@ -496,6 +510,21 @@ function exposeBugDropAPI(root: HTMLElement, config: WidgetConfig) {
     // Check if floating button is visible
     isButtonVisible: () => {
       return _triggerButton !== null && _triggerButton.style.display !== 'none';
+    },
+
+    // Set the widget theme at runtime.
+    // Accepts 'light' | 'dark' | 'auto'. Invalid input warns and no-ops.
+    setTheme: (mode: unknown) => {
+      if (!isValidTheme(mode)) {
+        console.warn(
+          `[BugDrop] Invalid theme ${JSON.stringify(mode)}. Expected 'light' | 'dark' | 'auto'.`
+        );
+        return;
+      }
+      _currentMode = mode;
+      const resolved = resolveTheme(mode);
+      applyThemeClass(root, resolved);
+      applyCustomStyles(root, config, resolved);
     },
   };
 }
