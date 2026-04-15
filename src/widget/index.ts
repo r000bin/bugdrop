@@ -10,6 +10,14 @@ import { createElementPicker } from './picker';
 import { createAreaPicker } from './area-picker';
 import { createAnnotator } from './annotator';
 import { injectStyles, createModal, showSuccessModal } from './ui';
+import {
+  resolveTheme,
+  applyThemeClass,
+  applyCustomStyles,
+  attachSystemThemeListener,
+  isValidTheme,
+  type ThemeMode,
+} from './theme';
 
 interface WidgetConfig {
   repo: string;
@@ -56,6 +64,7 @@ interface BugDropAPI {
   show: () => void;
   isOpen: () => boolean;
   isButtonVisible: () => boolean;
+  setTheme: (mode: ThemeMode) => void;
 }
 
 // Declare global BugDrop API
@@ -440,6 +449,11 @@ function initWidget(config: WidgetConfig) {
 
 // Create and expose the BugDrop JavaScript API
 function exposeBugDropAPI(root: HTMLElement, config: WidgetConfig) {
+  // Closure-captured so each widget instance has its own mode state. Read by
+  // the matchMedia listener below and mutated by setTheme. No module-level
+  // state needed — keeps per-init isolation if multi-instance is ever added.
+  let currentMode: ThemeMode = config.theme;
+
   window.BugDrop = {
     // Open the feedback modal programmatically
     open: () => {
@@ -497,7 +511,35 @@ function exposeBugDropAPI(root: HTMLElement, config: WidgetConfig) {
     isButtonVisible: () => {
       return _triggerButton !== null && _triggerButton.style.display !== 'none';
     },
+
+    // Set the widget theme at runtime. Accepts 'light' | 'dark' | 'auto'.
+    // Invalid input warns and no-ops. Only toggles the root class and re-runs
+    // the custom-color inline styles — it does NOT re-inject the <style> block
+    // because the dark-mode CSS variables are already defined statically in
+    // `.bd-root.bd-dark { ... }` and get activated by the class flip alone.
+    setTheme: (mode: unknown) => {
+      if (!isValidTheme(mode)) {
+        console.warn(
+          `[BugDrop] Invalid theme ${String(mode)}. Expected 'light' | 'dark' | 'auto'.`
+        );
+        return;
+      }
+      currentMode = mode;
+      const resolved = resolveTheme(mode);
+      applyThemeClass(root, resolved);
+      applyCustomStyles(root, config, resolved);
+    },
   };
+
+  // Fix for data-theme="auto" not following OS changes after init. One
+  // persistent listener gated by `currentMode === 'auto'` so explicit
+  // light/dark modes ignore OS changes. Cleanup fn is discarded — widgets
+  // live for the page lifetime.
+  attachSystemThemeListener(resolved => {
+    if (currentMode !== 'auto') return;
+    applyThemeClass(root, resolved);
+    applyCustomStyles(root, config, resolved);
+  });
 }
 
 // Helper to create the trigger button (used by show() API and pull tab restore)
