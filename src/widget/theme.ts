@@ -31,7 +31,7 @@ export function resolveTheme(
 }
 
 export function isValidTheme(value: unknown): value is ThemeMode {
-  throw new Error('not implemented');
+  return value === 'light' || value === 'dark' || value === 'auto';
 }
 
 export function applyThemeClass(root: HTMLElement, resolved: ResolvedTheme): void {
