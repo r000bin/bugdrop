@@ -4,6 +4,7 @@
 [![Version](https://img.shields.io/badge/version-1.11.0-14b8a6)](./CHANGELOG.md)
 [![Security Policy](https://img.shields.io/badge/Security-Policy-blue)](./SECURITY.md)
 [![Live Demo](https://img.shields.io/badge/Demo-Try_It_Live-ff9e64)](https://bugdrop-widget-test.vercel.app)
+[![GitHub Marketplace](https://img.shields.io/badge/GitHub%20Marketplace-Install-2ea44f?logo=github)](https://github.com/marketplace/bugdrop-in-app-feedback-to-github-issues)
 
 In-app feedback → GitHub Issues. Screenshots, annotations, the works.
 
@@ -15,7 +16,7 @@ In-app feedback → GitHub Issues. Screenshots, annotations, the works.
 
 **1. Install the GitHub App** on your repository:
 
-https://github.com/apps/neonwatty-bugdrop/installations/new
+https://github.com/marketplace/bugdrop-in-app-feedback-to-github-issues
 
 **2. Add the script** to your website:
 
@@ -47,6 +48,7 @@ See [full documentation](https://bugdrop.dev/docs/configuration) for all options
 ## Documentation
 
 - [Full Documentation](https://bugdrop.dev/docs)
+- [GitHub Marketplace](https://github.com/marketplace/bugdrop-in-app-feedback-to-github-issues)
 - [Configuration](https://bugdrop.dev/docs/configuration)
 - [Styling](https://bugdrop.dev/docs/styling)
 - [JavaScript API](https://bugdrop.dev/docs/javascript-api)
