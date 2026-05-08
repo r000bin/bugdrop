@@ -12,6 +12,7 @@ BugDrop is a free, open-source feedback widget that creates GitHub Issues with s
 - You may use the hosted widget on any website where you have authority to add scripts.
 - You must have the GitHub App installed on a repository you own or administer.
 - Do not use the service to submit spam, abusive content, or illegal material via GitHub Issues.
+- The hosted service is not a spam, malware, or content moderation service. Feedback submissions are unauthenticated user-generated content.
 
 ## No Warranty
 
@@ -20,6 +21,8 @@ THE SERVICE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED
 ## Rate Limits
 
 The service enforces rate limits (10 requests per IP per 15 minutes, 50 per repository per hour) to prevent abuse and protect GitHub API quotas. Exceeding these limits will result in temporary throttling.
+
+For stricter security or compliance requirements, self-host BugDrop and apply your own WAF, CAPTCHA, logging, retention, and content filtering controls.
 
 ## GitHub
 

@@ -31,6 +31,8 @@ That's it! Users can now click the bug button to submit feedback as GitHub Issue
 
 > **Branch protection:** BugDrop works with repos that have branch protection rules (required PRs, merge queues). Screenshots are stored on a dedicated `bugdrop-screenshots` branch that is auto-created on first use — no manual setup needed.
 
+> **Security note:** BugDrop is not a spam or malware filtering service. Treat feedback and screenshots as unauthenticated user-generated content. Exclude `bugdrop-screenshots` from CI/deploy workflows, and self-host behind your own WAF/CAPTCHA/content controls for stricter environments.
+
 ## Widget Options
 
 | Attribute       | Values                                               | Default          |

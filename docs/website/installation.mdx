@@ -104,6 +104,8 @@ If you have a strict CSP, make sure both the BugDrop worker domain and jsDelivr 
 
 BugDrop stores screenshots in a dedicated branch called `bugdrop-screenshots` in your repository. This branch is created automatically when the first screenshot is uploaded.
 
+Treat this branch as user-generated content storage. Exclude `bugdrop-screenshots` from CI/deploy workflows and keep privileged workflows limited to `main` or other trusted branches.
+
 **If you use branch protection rules**, make sure the BugDrop GitHub App has permission to push to the `bugdrop-screenshots` branch. You can do this by either:
 
 1. **Excluding the branch from protection rules** -- Add `bugdrop-screenshots` to the exclusion list in your branch protection settings

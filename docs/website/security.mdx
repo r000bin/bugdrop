@@ -11,9 +11,10 @@ The BugDrop GitHub App requests the minimum permissions necessary to function:
 | **Issues** | Read & Write | Create bug reports, feature requests, and questions as GitHub Issues |
 | **Contents** | Read & Write | Store screenshots in the repository on the `bugdrop-screenshots` branch |
 
+GitHub App `Contents` permissions are repository-scoped, not branch-scoped. BugDrop's implementation writes screenshots only to `.bugdrop/screenshots/` on the dedicated `bugdrop-screenshots` branch, but GitHub does not provide a narrower branch-only permission for this API.
+
 BugDrop does **not** request access to:
 
-- Your source code (contents access is limited to the `bugdrop-screenshots` branch)
 - Pull requests
 - Actions or workflows
 - Secrets or environment variables
@@ -48,6 +49,8 @@ Screenshots are stored as image files in a `.bugdrop/` directory on a dedicated 
 
 The screenshot branch is created automatically when the first screenshot is uploaded. No manual setup is required.
 
+Treat screenshots as unauthenticated user-generated content. The hosted service enforces rate limits, size limits, and PNG payload validation, but it is not a spam or malware filtering product.
+
 ### Screenshot Format
 
 Screenshots are captured client-side using [html2canvas](https://html2canvas.hertzen.com/), which renders the current page to a canvas element in the user's browser. The canvas is then converted to a PNG image and uploaded. This means:
@@ -55,6 +58,8 @@ Screenshots are captured client-side using [html2canvas](https://html2canvas.her
 - The screenshot captures what the user actually sees
 - No server-side rendering or page access is required
 - The screenshot is generated entirely in the user's browser before being sent to the API
+
+Because clients are untrusted, the API validates screenshot uploads server-side before storing them. BugDrop currently accepts PNG data URLs only and rejects SVG, malformed base64, oversized payloads, and data that does not have a PNG file signature.
 
 ## Privacy
 
@@ -132,8 +137,11 @@ If these limits are too restrictive for your use case, consider [self-hosting](/
 
 1. **Review app permissions** -- Periodically check the BugDrop GitHub App's permissions in your GitHub settings
 2. **Monitor the screenshots branch** -- Occasionally review the `bugdrop-screenshots` branch for unexpected content
-3. **Use branch protection** -- Keep your main branch protected. BugDrop only needs write access to the `bugdrop-screenshots` branch
-4. **Set up CSP** -- If you use a Content Security Policy, explicitly whitelist the required domains rather than using broad wildcards
+3. **Exclude screenshot storage from CI** -- Do not run privileged CI/deploy workflows on `bugdrop-screenshots`; treat it as user-generated content storage, not application source
+4. **Use branch protection** -- Keep your main branch protected and limit deploy/build workflows to `main` or other trusted branches
+5. **Set up CSP** -- If you use a Content Security Policy, explicitly whitelist the required domains rather than using broad wildcards
+
+The hosted service is intended for lightweight feedback collection. If your site is public, high-traffic, compliance-sensitive, or exposed to adversarial submissions, self-host BugDrop and place it behind your own WAF, CAPTCHA, logging, retention, and content filtering controls.
 
 ### For Self-Hosters
 
@@ -142,7 +150,9 @@ If you run your own instance of BugDrop:
 1. **Rotate your GitHub App credentials** regularly
 2. **Set appropriate rate limits** for your expected traffic
 3. **Monitor your Cloudflare Worker logs** for unusual activity
-4. **Keep your instance updated** with the latest version
+4. **Add edge protections** such as WAF rules, CAPTCHA, bot detection, and allowlists as needed
+5. **Define retention/cleanup** for the `bugdrop-screenshots` branch
+6. **Keep your instance updated** with the latest version
 
 ## Reporting Security Issues
 

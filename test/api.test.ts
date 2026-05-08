@@ -22,6 +22,9 @@ const createApiRoutes = async () => {
 };
 
 describe('API Routes', () => {
+  const validPngDataUrl =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
   let app: Hono;
   const mockEnv: Env = {
     GITHUB_APP_ID: 'test-app-id',
@@ -274,8 +277,6 @@ describe('API Routes', () => {
 
     it('should upload screenshot and include URL in issue body', async () => {
       mockGetInstallationToken.mockResolvedValue('test-token');
-      const screenshotDataUrl =
-        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
       const uploadedUrl =
         'https://raw.githubusercontent.com/testowner/testrepo/main/.feedback/screenshots/123456.png';
       mockUploadScreenshotAsAsset.mockResolvedValue(uploadedUrl);
@@ -286,7 +287,7 @@ describe('API Routes', () => {
 
       const payloadWithScreenshot = {
         ...validPayload,
-        screenshot: screenshotDataUrl,
+        screenshot: validPngDataUrl,
       };
 
       const req = new Request('http://localhost/feedback', {
@@ -301,7 +302,7 @@ describe('API Routes', () => {
         'test-token',
         'testowner',
         'testrepo',
-        screenshotDataUrl
+        validPngDataUrl
       );
       expect(mockCreateIssue).toHaveBeenCalledWith(
         'test-token',
@@ -315,7 +316,6 @@ describe('API Routes', () => {
 
     it('should use screenshot when provided (annotations handled client-side)', async () => {
       mockGetInstallationToken.mockResolvedValue('test-token');
-      const screenshotDataUrl = 'data:image/png;base64,screenshot';
       const uploadedUrl =
         'https://raw.githubusercontent.com/testowner/testrepo/main/.feedback/screenshots/789.png';
       mockUploadScreenshotAsAsset.mockResolvedValue(uploadedUrl);
@@ -326,7 +326,7 @@ describe('API Routes', () => {
 
       const payloadWithScreenshot = {
         ...validPayload,
-        screenshot: screenshotDataUrl,
+        screenshot: validPngDataUrl,
       };
 
       const req = new Request('http://localhost/feedback', {
@@ -340,7 +340,7 @@ describe('API Routes', () => {
         'test-token',
         'testowner',
         'testrepo',
-        screenshotDataUrl
+        validPngDataUrl
       );
     });
 
@@ -380,6 +380,60 @@ describe('API Routes', () => {
       expect(res.status).toBe(400);
       expect(data.error).toContain('Screenshot too large');
       expect(data.error).toContain('exceeds 5MB limit');
+    });
+
+    it('should reject SVG screenshots', async () => {
+      const svgScreenshot =
+        'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==';
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...validPayload,
+          screenshot: svgScreenshot,
+        }),
+      });
+      const res = await app.fetch(req, mockEnv);
+      const data = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(data.error).toContain('Expected a PNG data URL');
+      expect(mockUploadScreenshotAsAsset).not.toHaveBeenCalled();
+    });
+
+    it('should reject invalid base64 screenshots', async () => {
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...validPayload,
+          screenshot: 'data:image/png;base64,not valid base64',
+        }),
+      });
+      const res = await app.fetch(req, mockEnv);
+      const data = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(data.error).toContain('Expected a PNG data URL');
+      expect(mockUploadScreenshotAsAsset).not.toHaveBeenCalled();
+    });
+
+    it('should reject PNG data URLs with non-PNG bytes', async () => {
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...validPayload,
+          screenshot: 'data:image/png;base64,SGVsbG8=',
+        }),
+      });
+      const res = await app.fetch(req, mockEnv);
+      const data = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(data.error).toContain('Expected PNG image data');
+      expect(mockUploadScreenshotAsAsset).not.toHaveBeenCalled();
     });
 
     it('should return 500 when GitHub API fails', async () => {

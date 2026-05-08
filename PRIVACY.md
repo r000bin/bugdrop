@@ -23,7 +23,9 @@ When a user submits feedback through the BugDrop widget, the following data is c
 
 ## Where Data Goes
 
-All submitted feedback is sent to the **GitHub API** and created as a GitHub Issue in the repository configured by the site owner. Screenshots are stored in the repository's `.bugdrop/` directory. The BugDrop Cloudflare Worker acts only as a pass-through to authenticate with GitHub — it does not store any submitted data.
+All submitted feedback is sent to the **GitHub API** and created as a GitHub Issue in the repository configured by the site owner. Screenshots are stored in the repository's `.bugdrop/` directory on the `bugdrop-screenshots` branch. The BugDrop Cloudflare Worker acts only as a pass-through to authenticate with GitHub — it does not store any submitted data.
+
+Feedback and screenshots are unauthenticated user-generated content. The hosted service applies rate limits, size limits, and PNG screenshot validation, but it does not provide email-grade spam or malware filtering.
 
 ## Data Processing
 
@@ -31,7 +33,7 @@ BugDrop runs on **Cloudflare Workers**. Requests are processed in-memory and are
 
 ## Self-Hosting
 
-BugDrop is fully open source and self-hostable. If you run your own instance, you control all data processing. See [SELF_HOSTING.md](./SELF_HOSTING.md) for instructions.
+BugDrop is fully open source and self-hostable. If you run your own instance, you control all data processing and can add your own WAF, CAPTCHA, logging, retention, and content filtering controls. See [SELF_HOSTING.md](./SELF_HOSTING.md) for instructions.
 
 ## Contact
 

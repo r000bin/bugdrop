@@ -9,6 +9,7 @@ node_modules/
 playwright-report/
 test-results/
 coverage/
+.playwright-cli/
 
 # Lock files
 package-lock.json

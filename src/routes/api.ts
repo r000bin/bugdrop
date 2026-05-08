@@ -101,18 +101,13 @@ api.post('/feedback', async c => {
     );
   }
 
-  // Validate screenshot size
+  // Validate screenshot payload. The browser widget emits PNG data URLs, but
+  // callers can hit the API directly, so the server must not trust the prefix.
   const maxSizeMB = parseInt(c.env.MAX_SCREENSHOT_SIZE_MB || '5', 10);
   if (payload.screenshot) {
-    const sizeBytes = (payload.screenshot.length * 3) / 4; // Base64 to bytes
-    const sizeMB = sizeBytes / (1024 * 1024);
-    if (sizeMB > maxSizeMB) {
-      return c.json(
-        {
-          error: `Screenshot too large: ${sizeMB.toFixed(1)}MB exceeds ${maxSizeMB}MB limit`,
-        },
-        400
-      );
+    const validation = validateScreenshotDataUrl(payload.screenshot, maxSizeMB);
+    if (!validation.valid) {
+      return c.json({ error: validation.error }, 400);
     }
   }
 
@@ -144,7 +139,7 @@ api.post('/feedback', async c => {
     // Upload screenshot as file and get URL
     let screenshotUrl: string | undefined;
     const imageData = payload.screenshot;
-    if (imageData && imageData.startsWith('data:image/')) {
+    if (imageData) {
       try {
         screenshotUrl = await uploadScreenshotAsAsset(token, owner, repo, imageData);
       } catch (error) {
@@ -189,6 +184,72 @@ api.post('/feedback', async c => {
     );
   }
 });
+
+type ScreenshotValidationResult = { valid: true } | { valid: false; error: string };
+
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+function validateScreenshotDataUrl(dataUrl: string, maxSizeMB: number): ScreenshotValidationResult {
+  const match = dataUrl.match(/^data:image\/png;base64,([A-Za-z0-9+/]+={0,2})$/);
+  if (!match) {
+    return {
+      valid: false,
+      error: 'Invalid screenshot format. Expected a PNG data URL.',
+    };
+  }
+
+  const base64 = match[1];
+  if (!base64) {
+    return {
+      valid: false,
+      error: 'Invalid screenshot format. Expected a PNG data URL.',
+    };
+  }
+
+  const estimatedSizeBytes =
+    Math.floor((base64.length * 3) / 4) -
+    (base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0);
+  const estimatedSizeMB = estimatedSizeBytes / (1024 * 1024);
+  if (estimatedSizeMB > maxSizeMB) {
+    return {
+      valid: false,
+      error: `Screenshot too large: ${estimatedSizeMB.toFixed(1)}MB exceeds ${maxSizeMB}MB limit`,
+    };
+  }
+
+  let bytes: Uint8Array;
+  try {
+    bytes = base64ToBytes(base64);
+  } catch {
+    return {
+      valid: false,
+      error: 'Invalid screenshot format. Expected valid base64 PNG data.',
+    };
+  }
+
+  if (!hasPngSignature(bytes)) {
+    return {
+      valid: false,
+      error: 'Invalid screenshot format. Expected PNG image data.',
+    };
+  }
+
+  return { valid: true };
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function hasPngSignature(bytes: Uint8Array): boolean {
+  if (bytes.length < PNG_SIGNATURE.length) return false;
+  return PNG_SIGNATURE.every((byte, index) => bytes[index] === byte);
+}
 
 /**
  * Format the issue body with markdown
