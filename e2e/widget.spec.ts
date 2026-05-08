@@ -453,6 +453,54 @@ test.describe('Widget Interaction', () => {
     await expect(overlay).not.toBeVisible({ timeout: 3000 });
   });
 
+  test('screenshot options prioritize capture actions before skip', async ({ page }) => {
+    await page.route('**/api/check/**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ installed: true }),
+      });
+    });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/test/');
+
+    const host = page.locator('#bugdrop-host');
+    const button = host.locator('css=.bd-trigger');
+    await expect(button).toBeVisible({ timeout: 5000 });
+    await button.click();
+
+    const getStartedBtn = host.locator('css=[data-action="continue"]');
+    await expect(getStartedBtn).toBeVisible({ timeout: 5000 });
+    await getStartedBtn.click();
+
+    const titleInput = host.locator('css=#title');
+    await expect(titleInput).toBeVisible({ timeout: 5000 });
+    await titleInput.fill('Test screenshot hierarchy');
+
+    const screenshotCheckbox = host.locator('css=#include-screenshot');
+    await screenshotCheckbox.check();
+
+    const submitBtn = host.locator('css=#submit-btn');
+    await submitBtn.click();
+
+    const actions = host.locator('css=.bd-screenshot-actions [data-action]');
+    await expect(actions).toHaveCount(4);
+
+    const actionOrder = await actions.evaluateAll(buttons =>
+      buttons.map(button => (button as HTMLElement).dataset.action)
+    );
+    expect(actionOrder).toEqual(['capture', 'area', 'element', 'skip']);
+
+    await expect(host.locator('css=[data-action="capture"]')).toHaveClass(/bd-btn-primary/);
+    await expect(host.locator('css=[data-action="skip"]')).toHaveClass(/bd-btn-quiet/);
+
+    const verticalPositions = await actions.evaluateAll(buttons =>
+      buttons.map(button => Math.round((button as HTMLElement).getBoundingClientRect().top))
+    );
+    expect(verticalPositions).toEqual([...verticalPositions].sort((a, b) => a - b));
+  });
+
   test('retake button on annotation step returns to screenshot options', async ({ page }) => {
     await page.route('**/api/check/**', async route => {
       await route.fulfill({

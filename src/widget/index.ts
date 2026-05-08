@@ -1138,11 +1138,11 @@ function showScreenshotOptions(
       `
         <p style="margin: 0 0 16px; color: var(--bd-text-secondary);">Choose what to capture:</p>
         ${complexNote}
-        <div class="bd-actions" style="flex-wrap: wrap; gap: 8px;">
-          ${allowSkip ? '<button class="bd-btn bd-btn-secondary" data-action="skip">Skip Screenshot</button>' : ''}
-          <button class="bd-btn bd-btn-secondary" data-action="element">Select Element</button>
-          ${fullPageDisabled ? '' : '<button class="bd-btn bd-btn-secondary" data-action="area">Select Area</button>'}
+        <div class="bd-actions bd-screenshot-actions">
           ${fullPageDisabled ? '' : '<button class="bd-btn bd-btn-primary" data-action="capture">Full Page</button>'}
+          ${fullPageDisabled ? '' : '<button class="bd-btn bd-btn-secondary" data-action="area">Select Area</button>'}
+          <button class="bd-btn bd-btn-secondary" data-action="element">Select Element</button>
+          ${allowSkip ? '<button class="bd-btn bd-btn-quiet" data-action="skip">Skip Screenshot</button>' : ''}
         </div>
       `
     );

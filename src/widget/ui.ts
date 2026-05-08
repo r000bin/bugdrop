@@ -462,6 +462,19 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
       background: var(--bd-bg-secondary);
     }
 
+    .bd-btn-quiet {
+      background: transparent;
+      border: none;
+      color: var(--bd-text-secondary);
+      padding-left: 12px;
+      padding-right: 12px;
+    }
+
+    .bd-btn-quiet:hover {
+      background: var(--bd-bg-secondary);
+      color: var(--bd-text-primary);
+    }
+
     .bd-btn:disabled {
       opacity: 0.6;
       cursor: not-allowed;
@@ -668,6 +681,11 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
       gap: 12px;
       justify-content: flex-end;
       margin-top: 20px;
+    }
+
+    .bd-screenshot-actions {
+      flex-wrap: wrap;
+      gap: 8px;
     }
 
     /* Tools Toolbar */
@@ -880,6 +898,10 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
 
       .bd-actions .bd-btn {
         width: 100%;
+      }
+
+      .bd-screenshot-actions {
+        flex-direction: column;
       }
 
       .bd-tools {
