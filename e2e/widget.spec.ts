@@ -1982,6 +1982,70 @@ test.describe('Feedback Categories', () => {
     await expect(questionOption).toBeAttached();
   });
 
+  test('feedback form fields progress from category to details and submitter info', async ({
+    page,
+  }) => {
+    await page.route('**/api/check/**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ installed: true }),
+      });
+    });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/test/?showName=true&showEmail=true');
+
+    const host = page.locator('#bugdrop-host');
+    await host.locator('css=.bd-trigger').click();
+    await host.locator('css=[data-action="continue"]').click();
+    await expect(host.locator('css=#title')).toBeVisible({ timeout: 5000 });
+
+    const fieldOrder = await host.locator('css=#feedback-form').evaluate(form =>
+      Array.from(form.children)
+        .map(child => {
+          if (!(child instanceof HTMLElement)) return null;
+          if (child.querySelector('.bd-category-selector')) return 'category';
+          if (child.querySelector('#title')) return 'title';
+          if (child.querySelector('#description')) return 'description';
+          if (child.querySelector('#name')) return 'name';
+          if (child.querySelector('#email')) return 'email';
+          if (child.querySelector('#include-screenshot')) return 'screenshot';
+          if (child.classList.contains('bd-actions')) return 'actions';
+          return null;
+        })
+        .filter(Boolean)
+    );
+
+    expect(fieldOrder).toEqual([
+      'category',
+      'title',
+      'description',
+      'name',
+      'email',
+      'screenshot',
+      'actions',
+    ]);
+
+    const formFields = [
+      host.locator('css=.bd-category-selector'),
+      host.locator('css=#title'),
+      host.locator('css=#description'),
+      host.locator('css=#name'),
+      host.locator('css=#email'),
+      host.locator('css=#include-screenshot'),
+    ];
+    const boxes = await Promise.all(formFields.map(locator => locator.boundingBox()));
+
+    expect(boxes.every(Boolean)).toBe(true);
+    for (let i = 1; i < boxes.length; i += 1) {
+      expect(boxes[i]!.y).toBeGreaterThan(boxes[i - 1]!.y);
+    }
+
+    const categoryBox = await host.locator('css=.bd-category-selector').boundingBox();
+    expect(categoryBox?.height).toBeLessThan(60);
+  });
+
   test('bug category is selected by default', async ({ page }) => {
     // Mock installation check
     await page.route('**/api/check/**', async route => {

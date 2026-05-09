@@ -932,6 +932,17 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
         min-height: 48px;
       }
 
+      .bd-category-option {
+        gap: 4px !important;
+        padding: 8px !important;
+        min-width: 0;
+      }
+
+      .bd-category-option span {
+        font-size: 0.85rem !important;
+        white-space: nowrap;
+      }
+
       .bd-textarea {
         min-height: 120px;
       }

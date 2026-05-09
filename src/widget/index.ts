@@ -1021,12 +1021,6 @@ function showFeedbackFormWithScreenshotOption(
       'Send Feedback',
       `
         <form id="feedback-form">
-          ${nameFieldHtml}
-          ${emailFieldHtml}
-          <div class="bd-form-group">
-            <label class="bd-label" for="title">Title *</label>
-            <input type="text" id="title" class="bd-input" required placeholder="Brief description of the issue or suggestion" value="${escapeHtml(initialValues?.title || '')}" />
-          </div>
           <div class="bd-form-group">
             <label class="bd-label">Category</label>
             <div class="bd-category-selector" style="display: flex; gap: 8px; margin-top: 6px;">
@@ -1045,9 +1039,15 @@ function showFeedbackFormWithScreenshotOption(
             </div>
           </div>
           <div class="bd-form-group">
+            <label class="bd-label" for="title">Title *</label>
+            <input type="text" id="title" class="bd-input" required placeholder="Brief description of the issue or suggestion" value="${escapeHtml(initialValues?.title || '')}" />
+          </div>
+          <div class="bd-form-group">
             <label class="bd-label" for="description">Description</label>
             <textarea id="description" class="bd-textarea" placeholder="Provide additional details, steps to reproduce, or context...">${escapeHtml(initialValues?.description || '')}</textarea>
           </div>
+          ${nameFieldHtml}
+          ${emailFieldHtml}
           ${getScreenshotFormControl(config, initialValues)}
           <div class="bd-actions">
             <button type="button" class="bd-btn bd-btn-secondary" data-action="cancel">Cancel</button>
