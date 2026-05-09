@@ -688,6 +688,10 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
       margin-top: 20px;
     }
 
+    .bd-success-actions {
+      justify-content: center;
+    }
+
     .bd-screenshot-actions {
       flex-wrap: wrap;
       gap: 8px;
@@ -1112,7 +1116,7 @@ export function showSuccessModal(
           </div>
           ${issueInfo}
         </div>
-        <div class="bd-actions">
+        <div class="bd-actions bd-success-actions">
           <button class="bd-btn bd-btn-primary" data-action="done">Done</button>
         </div>
         <div class="bd-powered-by">
