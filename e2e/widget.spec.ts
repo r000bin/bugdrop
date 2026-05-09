@@ -2298,6 +2298,19 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     return () => count;
   }
 
+  async function trackFeedbackPayloads(page: Page) {
+    const payloads: Array<Record<string, unknown>> = [];
+    await page.route('**/feedback', async route => {
+      payloads.push(route.request().postDataJSON());
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, issueNumber: 1, issueUrl: '#', isPublic: false }),
+      });
+    });
+    return payloads;
+  }
+
   async function expectReturnedToForm(host: ReturnType<Page['locator']>, title: string) {
     const titleInput = host.locator('css=#title');
     await expect(titleInput).toBeVisible({ timeout: 5000 });
@@ -2542,6 +2555,178 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     // Complexity notice should be shown
     const notice = host.locator('css=p >> text=too complex');
     await expect(notice).toBeVisible();
+  });
+
+  test('remembers complex-page screenshot skip for issue #116 repeated reports', async ({
+    page,
+  }) => {
+    const payloads = await trackFeedbackPayloads(page);
+    await page.goto('/test/complex-dom.html?nodes=12000');
+
+    const nodeCount = await page.evaluate(() => document.body.querySelectorAll('*').length);
+    expect(nodeCount).toBeGreaterThanOrEqual(10000);
+
+    const host = await navigateToScreenshotOptions(page);
+    await expect(host.locator('css=p >> text=too complex')).toBeVisible();
+
+    await host.locator('css=[data-action="skip"]').click();
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 5000 });
+    expect(payloads).toHaveLength(1);
+
+    await host.locator('css=.bd-close').click();
+    await host.locator('css=.bd-trigger').click();
+
+    const secondTitle = host.locator('css=#title');
+    await expect(secondTitle).toBeVisible({ timeout: 5000 });
+    await secondTitle.fill('Issue 116 second report');
+
+    const screenshotCheckbox = host.locator('css=#include-screenshot');
+    await expect(screenshotCheckbox).not.toBeChecked();
+
+    await host.locator('css=#submit-btn').click();
+
+    await expect(host.locator('css=[data-action="element"]')).not.toBeVisible();
+    await expect(host.locator('css=p >> text=too complex')).not.toBeVisible();
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 5000 });
+    expect(payloads).toHaveLength(2);
+
+    for (const payload of payloads) {
+      const metadata = payload.metadata as { domNodeCount?: number; fullPageDisabled?: boolean };
+      expect(payload.screenshot).toBeNull();
+      expect(metadata.domNodeCount).toBeGreaterThanOrEqual(10000);
+      expect(metadata.fullPageDisabled).toBe(true);
+    }
+  });
+
+  test('persists complex-page screenshot skip after reload for issue #116', async ({ page }) => {
+    const payloads = await trackFeedbackPayloads(page);
+    await page.goto('/test/complex-dom.html?nodes=12000');
+
+    const host = await navigateToScreenshotOptions(page);
+    await host.locator('css=[data-action="skip"]').click();
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 5000 });
+
+    await page.reload();
+    await host.locator('css=.bd-trigger').click();
+
+    const titleInput = host.locator('css=#title');
+    await expect(titleInput).toBeVisible({ timeout: 5000 });
+    await titleInput.fill('Issue 116 after reload');
+
+    await expect(host.locator('css=#include-screenshot')).not.toBeChecked();
+    await host.locator('css=#submit-btn').click();
+
+    await expect(host.locator('css=[data-action="element"]')).not.toBeVisible();
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 5000 });
+    expect(payloads).toHaveLength(2);
+    expect(payloads[1].screenshot).toBeNull();
+  });
+
+  test('complex-page screenshot skip is scoped to redacted page and current complexity', async ({
+    page,
+  }) => {
+    await trackFeedbackSubmissions(page);
+    await page.goto('/test/complex-dom.html?nodes=12000');
+
+    const host = await navigateToScreenshotOptions(page);
+    await host.locator('css=[data-action="skip"]').click();
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 5000 });
+
+    await page.goto('/test/complex-dom.html?nodes=4000');
+    await host.locator('css=.bd-trigger').click();
+    await expect(host.locator('css=#title')).toBeVisible({ timeout: 5000 });
+    await expect(host.locator('css=#include-screenshot')).toBeChecked();
+    await host.locator('css=.bd-close').click();
+
+    await page.goto('/test/complex-dom.html?nodes=12001');
+    await host.locator('css=.bd-trigger').click();
+    await expect(host.locator('css=#title')).toBeVisible({ timeout: 5000 });
+    await expect(host.locator('css=#include-screenshot')).not.toBeChecked();
+  });
+
+  test('complex-page screenshot skip is scoped by repo', async ({ page }) => {
+    await trackFeedbackSubmissions(page);
+    await page.goto('/test/complex-dom.html?nodes=12000&repo=owner/repo-a');
+
+    const host = await navigateToScreenshotOptions(page);
+    await host.locator('css=[data-action="skip"]').click();
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 5000 });
+
+    await page.goto('/test/complex-dom.html?nodes=12000&repo=owner/repo-b');
+    await host.locator('css=.bd-trigger').click();
+    await host.locator('css=[data-action="continue"]').click();
+    await expect(host.locator('css=#title')).toBeVisible({ timeout: 5000 });
+    await expect(host.locator('css=#include-screenshot')).toBeChecked();
+  });
+
+  test('complex-page screenshot skip does not apply after same-url DOM becomes simple', async ({
+    page,
+  }) => {
+    await trackFeedbackSubmissions(page);
+    await page.goto('/test/complex-dom.html?nodes=12000');
+
+    const host = await navigateToScreenshotOptions(page);
+    await host.locator('css=[data-action="skip"]').click();
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 5000 });
+    await host.locator('css=.bd-close').click();
+
+    await page.evaluate(() => {
+      document.querySelector('#complex-root')?.replaceChildren();
+    });
+
+    await host.locator('css=.bd-trigger').click();
+    await expect(host.locator('css=#title')).toBeVisible({ timeout: 5000 });
+    await expect(host.locator('css=#include-screenshot')).toBeChecked();
+  });
+
+  test('allows users to opt back into screenshots after complex-page skip', async ({ page }) => {
+    await trackFeedbackSubmissions(page);
+    await page.goto('/test/complex-dom.html?nodes=12000');
+
+    const host = await navigateToScreenshotOptions(page);
+    await host.locator('css=[data-action="skip"]').click();
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 5000 });
+
+    await host.locator('css=.bd-close').click();
+    await host.locator('css=.bd-trigger').click();
+
+    const titleInput = host.locator('css=#title');
+    await expect(titleInput).toBeVisible({ timeout: 5000 });
+    await titleInput.fill('Issue 116 opt back in');
+    const screenshotCheckbox = host.locator('css=#include-screenshot');
+    await expect(screenshotCheckbox).not.toBeChecked();
+    await screenshotCheckbox.check();
+    await host.locator('css=#submit-btn').click();
+
+    await expect(host.locator('css=p >> text=too complex')).toBeVisible();
+    await expect(host.locator('css=[data-action="element"]')).toBeVisible();
+  });
+
+  test('remembers complex-page skip after element capture failure skip', async ({ page }) => {
+    await trackFeedbackSubmissions(page);
+    await mockHtmlToImage(page, "function() { return Promise.reject(new Error('mock failure')); }");
+    await page.goto('/test/complex-dom.html?nodes=12000');
+
+    const host = await navigateToScreenshotOptions(page);
+    await host.locator('css=[data-action="element"]').click();
+    await expect(page.locator('#bugdrop-element-picker-tooltip')).toBeVisible({ timeout: 5000 });
+
+    const heading = page.locator('h1');
+    const headingBox = await heading.boundingBox();
+    expect(headingBox).toBeTruthy();
+    await page.mouse.click(
+      headingBox!.x + headingBox!.width / 2,
+      headingBox!.y + headingBox!.height / 2
+    );
+
+    await expect(host.locator('css=.bd-error-message__text')).toBeVisible({ timeout: 5000 });
+    await host.locator('css=[data-action="skip"]').click();
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 5000 });
+
+    await host.locator('css=.bd-close').click();
+    await host.locator('css=.bd-trigger').click();
+    await expect(host.locator('css=#title')).toBeVisible({ timeout: 5000 });
+    await expect(host.locator('css=#include-screenshot')).not.toBeChecked();
   });
 
   test('shows all buttons on pages below 10k nodes', async ({ page }) => {
@@ -2881,6 +3066,26 @@ test.describe('Screenshot Mode Configuration', () => {
         () => (window as Window & { __autoCaptureCount?: number }).__autoCaptureCount
       )
     ).toBe(1);
+  });
+
+  test('auto mode skips full-page capture on very complex pages', async ({ page }) => {
+    await setupInstalledApp(page);
+    await mockSuccessfulCapture(page);
+    const getPayload = await setupSuccessfulSubmit(page);
+
+    await page.goto('/test/complex-dom.html?nodes=12000&screenshot=auto');
+    const host = await openForm(page);
+
+    await expect(host.locator('css=#include-screenshot')).not.toBeAttached();
+    await host.locator('css=#submit-btn').click();
+
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+    expect(getPayload()?.screenshot).toBeNull();
+    expect(
+      await page.evaluate(
+        () => (window as Window & { __autoCaptureCount?: number }).__autoCaptureCount
+      )
+    ).toBeUndefined();
   });
 
   test('required mode removes the opt-out path and requires a capture before submit', async ({

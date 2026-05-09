@@ -88,6 +88,8 @@ interface FeedbackData {
 // localStorage key for dismissed state
 const BUGDROP_DISMISSED_KEY = 'bugdrop_dismissed';
 const BUGDROP_WELCOMED_PREFIX = 'bugdrop_welcomed_';
+const BUGDROP_COMPLEX_SCREENSHOT_SKIPPED_PREFIX = 'bugdrop_complex_screenshot_skipped_';
+const COMPLEX_SCREENSHOT_SKIP_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Parse user agent to extract browser info
 function parseBrowser(ua: string): { name: string; version: string } {
@@ -220,6 +222,50 @@ function markWelcomeSeen(repo: string): void {
   } catch {
     // localStorage may be blocked
   }
+}
+
+function getComplexScreenshotSkipKey(repo: string): string {
+  return `${BUGDROP_COMPLEX_SCREENSHOT_SKIPPED_PREFIX}${repo}:${redactUrl(window.location.href)}`;
+}
+
+function hasSkippedComplexScreenshots(repo: string): boolean {
+  try {
+    const key = getComplexScreenshotSkipKey(repo);
+    const skippedAt = localStorage.getItem(key);
+    if (!skippedAt) return false;
+
+    const timestamp = parseInt(skippedAt, 10);
+    if (isNaN(timestamp) || Date.now() - timestamp > COMPLEX_SCREENSHOT_SKIP_TTL_MS) {
+      localStorage.removeItem(key);
+      return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function markComplexScreenshotsSkipped(repo: string): void {
+  try {
+    localStorage.setItem(getComplexScreenshotSkipKey(repo), Date.now().toString());
+  } catch {
+    // localStorage may be blocked
+  }
+}
+
+function clearComplexScreenshotsSkipped(repo: string): void {
+  try {
+    localStorage.removeItem(getComplexScreenshotSkipKey(repo));
+  } catch {
+    // localStorage may be blocked
+  }
+}
+
+function rememberComplexScreenshotSkip(config: WidgetConfig, formResult: FeedbackFormResult): void {
+  if (!isFullPageDisabled()) return;
+  markComplexScreenshotsSkipped(config.repo);
+  formResult.includeScreenshot = false;
 }
 
 // Read config from script tag (fallback to src-based lookup for async/defer)
@@ -658,11 +704,13 @@ async function openFeedbackFlow(
 
     // Step 3: Screenshot flow (if configured/user opted in)
     if (config.screenshotMode === 'auto') {
-      const result = await captureWithLoading(root, undefined, config.screenshotScale);
-      if (result === 'cancel') {
-        returnToForm = true;
-      } else {
-        screenshot = result;
+      if (!isFullPageDisabled()) {
+        const result = await captureWithLoading(root, undefined, config.screenshotScale);
+        if (result === 'cancel') {
+          returnToForm = true;
+        } else {
+          screenshot = result;
+        }
       }
     } else if (formResult.includeScreenshot) {
       const screenshotRequired = config.screenshotMode === 'required';
@@ -678,6 +726,7 @@ async function openFeedbackFlow(
           break;
         }
         if (screenshotChoice === 'skip') {
+          rememberComplexScreenshotSkip(config, formResult);
           break;
         }
 
@@ -700,6 +749,7 @@ async function openFeedbackFlow(
             returnToForm = true;
             break;
           }
+          if (!result) rememberComplexScreenshotSkip(config, formResult);
           screenshot = result;
         } else if (screenshotChoice === 'element') {
           const element = await createElementPicker(pickerStyle);
@@ -711,6 +761,7 @@ async function openFeedbackFlow(
               returnToForm = true;
               break;
             }
+            if (!result) rememberComplexScreenshotSkip(config, formResult);
             screenshot = result;
             elementSelector = getElementSelector(element);
           }
@@ -1054,6 +1105,11 @@ function showFeedbackFormWithScreenshotOption(
         'input[name="category"]:checked'
       ) as HTMLInputElement;
       const category = (categoryInput?.value || 'bug') as FeedbackCategory;
+      const includeScreenshot =
+        config.screenshotMode === 'optional' ? (screenshotCheckbox?.checked ?? false) : true;
+      if (config.screenshotMode === 'optional' && includeScreenshot) {
+        clearComplexScreenshotsSkipped(config.repo);
+      }
 
       modal.remove();
       resolve({
@@ -1062,8 +1118,7 @@ function showFeedbackFormWithScreenshotOption(
         category,
         name: nameInput?.value.trim() || undefined,
         email: emailInput?.value.trim() || undefined,
-        includeScreenshot:
-          config.screenshotMode === 'optional' ? (screenshotCheckbox?.checked ?? false) : true,
+        includeScreenshot,
       });
     });
 
@@ -1094,9 +1149,13 @@ function getScreenshotFormControl(
     `;
   }
 
+  const includeScreenshot =
+    initialValues?.includeScreenshot ??
+    (!isFullPageDisabled() || !hasSkippedComplexScreenshots(config.repo));
+
   return `
     <div class="bd-form-group" style="display: flex; align-items: center; gap: 10px; margin-top: 8px;">
-      <input type="checkbox" id="include-screenshot" ${initialValues?.includeScreenshot === false ? '' : 'checked'} style="width: 18px; height: 18px; accent-color: var(--bd-primary); cursor: pointer;" />
+      <input type="checkbox" id="include-screenshot" ${includeScreenshot ? 'checked' : ''} style="width: 18px; height: 18px; accent-color: var(--bd-primary); cursor: pointer;" />
       <label for="include-screenshot" style="font-size: 0.95rem; color: var(--bd-text-secondary); cursor: pointer; user-select: none;">
         📸 Include a screenshot
       </label>
