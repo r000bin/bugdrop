@@ -1257,8 +1257,7 @@ function showAnnotationStep(
         <div id="annotation-canvas" class="bd-annotation-stage"></div>
         <div class="bd-actions">
           <button class="bd-btn bd-btn-secondary" data-action="retake">Retake</button>
-          <button class="bd-btn bd-btn-secondary" data-action="skip">Skip Annotations</button>
-          <button class="bd-btn bd-btn-primary" data-action="done">Done</button>
+          <button class="bd-btn bd-btn-primary" data-action="done">Submit Feedback</button>
         </div>
       `,
       false,
@@ -1289,7 +1288,6 @@ function showAnnotationStep(
     // Action buttons
     const closeBtn = modal.querySelector('.bd-close') as HTMLElement;
     const retakeBtn = modal.querySelector('[data-action="retake"]') as HTMLElement;
-    const skipBtn = modal.querySelector('[data-action="skip"]') as HTMLElement;
     const doneBtn = modal.querySelector('[data-action="done"]') as HTMLElement;
 
     closeBtn?.addEventListener('click', () => {
@@ -1302,12 +1300,6 @@ function showAnnotationStep(
       annotator.destroy();
       modal.remove();
       resolve('retake');
-    });
-
-    skipBtn?.addEventListener('click', () => {
-      annotator.destroy();
-      modal.remove();
-      resolve(screenshot);
     });
 
     doneBtn?.addEventListener('click', () => {

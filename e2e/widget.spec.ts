@@ -3362,4 +3362,44 @@ test.describe('Screenshot Mode Configuration', () => {
     await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
     expect(getPayload()?.screenshot).toEqual(expect.stringMatching(/^data:image\/png;base64,/));
   });
+
+  test('annotation actions use distinct labels and submit from one primary action', async ({
+    page,
+  }) => {
+    await setupInstalledApp(page);
+    await mockSuccessfulCapture(page);
+    const getPayload = await setupSuccessfulSubmit(page);
+
+    await page.goto('/test/');
+    const host = await openForm(page);
+
+    await host.locator('css=#include-screenshot').check();
+    await host.locator('css=#submit-btn').click();
+    await host.locator('css=[data-action="capture"]').click();
+
+    const annotationModal = host.locator('css=.bd-modal--annotator');
+    await expect(annotationModal).toBeVisible({ timeout: 10000 });
+    const annotationActions = annotationModal.locator('css=.bd-actions [data-action]');
+    await expect(annotationActions).toHaveCount(2);
+
+    expect(
+      await annotationActions.evaluateAll(buttons =>
+        buttons.map(button => ({
+          action: (button as HTMLElement).dataset.action,
+          label: (button as HTMLElement).textContent?.trim(),
+        }))
+      )
+    ).toEqual([
+      { action: 'retake', label: 'Retake' },
+      { action: 'done', label: 'Submit Feedback' },
+    ]);
+
+    await expect(annotationModal.locator('css=[data-action="skip"]')).toHaveCount(0);
+    await expect(annotationModal.getByRole('button', { name: 'Skip Annotations' })).toHaveCount(0);
+
+    await annotationModal.locator('css=[data-action="done"]').click();
+
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+    expect(getPayload()?.screenshot).toEqual(expect.stringMatching(/^data:image\/png;base64,/));
+  });
 });
