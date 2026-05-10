@@ -6,6 +6,8 @@ import {
   isFullPageDisabled,
   FULL_PAGE_DISABLE_THRESHOLD,
   cropScreenshot,
+  canCaptureViewportNatively,
+  beginViewportCapture,
 } from '../src/widget/screenshot';
 
 describe('getPixelRatio', () => {
@@ -111,5 +113,54 @@ describe('isFullPageDisabled', () => {
 describe('cropScreenshot', () => {
   it('is exported from screenshot module', () => {
     expect(typeof cropScreenshot).toBe('function');
+  });
+});
+
+describe('native viewport capture', () => {
+  afterEach(() => {
+    delete window.__bugdropMockViewportCapture;
+    vi.restoreAllMocks();
+  });
+
+  it('is unavailable without the Screen Capture API or test capture hook', () => {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: {},
+      configurable: true,
+    });
+
+    expect(canCaptureViewportNatively()).toBe(false);
+  });
+
+  it('is available when a secure origin exposes the Screen Capture API', () => {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: { getDisplayMedia: vi.fn() },
+      configurable: true,
+    });
+
+    expect(canCaptureViewportNatively()).toBe(true);
+  });
+
+  it('starts getDisplayMedia with current-tab viewport constraints', async () => {
+    const getDisplayMedia = vi.fn(() => Promise.reject(new Error('denied')));
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: { getDisplayMedia },
+      configurable: true,
+    });
+
+    await expect(beginViewportCapture()).rejects.toThrow('denied');
+    expect(getDisplayMedia).toHaveBeenCalledWith({
+      video: { displaySurface: 'browser' },
+      audio: false,
+      preferCurrentTab: true,
+    });
+  });
+
+  it('uses the viewport capture test hook when installed', async () => {
+    window.__bugdropMockViewportCapture = vi.fn(() =>
+      Promise.resolve('data:image/png;base64,test')
+    );
+
+    await expect(beginViewportCapture()).resolves.toBe('data:image/png;base64,test');
+    expect(window.__bugdropMockViewportCapture).toHaveBeenCalledOnce();
   });
 });

@@ -1,4 +1,6 @@
 import {
+  beginViewportCapture,
+  canCaptureViewportNatively,
   captureScreenshot,
   cropScreenshot,
   FULL_PAGE_DISABLE_THRESHOLD,
@@ -84,6 +86,14 @@ interface FeedbackData {
   name?: string;
   email?: string;
 }
+
+type ScreenshotChoice =
+  | 'skip'
+  | 'capture'
+  | 'element'
+  | 'area'
+  | 'cancel'
+  | { type: 'viewport'; capture: Promise<string> };
 
 // localStorage key for dismissed state
 const BUGDROP_DISMISSED_KEY = 'bugdrop_dismissed';
@@ -741,7 +751,23 @@ async function openFeedbackFlow(
           theme: config.theme,
         };
 
-        if (screenshotChoice === 'capture') {
+        if (typeof screenshotChoice === 'object' && screenshotChoice.type === 'viewport') {
+          const result = await capturePromiseWithLoading(
+            root,
+            screenshotChoice.capture,
+            () => beginViewportCapture(),
+            {
+              allowSkip: !screenshotRequired,
+              showLoading: false,
+            }
+          );
+          if (result === 'cancel') {
+            returnToForm = true;
+            break;
+          }
+          if (!result && !screenshotRequired) rememberComplexScreenshotSkip(config, formResult);
+          screenshot = result;
+        } else if (screenshotChoice === 'capture') {
           const result = await captureWithLoading(root, undefined, config.screenshotScale, {
             allowSkip: !screenshotRequired,
           });
@@ -822,24 +848,41 @@ async function captureWithLoading(
   screenshotScale?: number,
   opts?: { allowSkip?: boolean }
 ): Promise<string | null | 'cancel'> {
-  // Show a temporary loading indicator
-  const loadingModal = createModal(
+  return capturePromiseWithLoading(
     root,
-    'Capturing...',
-    `
-      <div style="display: flex; flex-direction: column; align-items: center; padding: 20px;">
-        <div class="bd-spinner bd-spinner--lg"></div>
-        <p class="bd-loading-text" style="margin-top: 12px;">Capturing screenshot...</p>
-      </div>
-    `
+    captureScreenshot(element, screenshotScale),
+    () => captureScreenshot(element, screenshotScale),
+    opts
   );
+}
+
+async function capturePromiseWithLoading(
+  root: HTMLElement,
+  capturePromise: Promise<string>,
+  retryCapture: () => Promise<string>,
+  opts?: { allowSkip?: boolean; showLoading?: boolean }
+): Promise<string | null | 'cancel'> {
+  // Show a temporary loading indicator
+  const loadingModal =
+    opts?.showLoading === false
+      ? null
+      : createModal(
+          root,
+          'Capturing...',
+          `
+            <div style="display: flex; flex-direction: column; align-items: center; padding: 20px;">
+              <div class="bd-spinner bd-spinner--lg"></div>
+              <p class="bd-loading-text" style="margin-top: 12px;">Capturing screenshot...</p>
+            </div>
+          `
+        );
 
   try {
-    const screenshot = await captureScreenshot(element, screenshotScale);
-    loadingModal.remove();
+    const screenshot = await capturePromise;
+    loadingModal?.remove();
     return screenshot;
   } catch (_error) {
-    loadingModal.remove();
+    loadingModal?.remove();
     const allowSkip = opts?.allowSkip !== false;
 
     // Show error with retry option
@@ -878,7 +921,7 @@ async function captureWithLoading(
 
       retryBtn?.addEventListener('click', async () => {
         errorModal.remove();
-        const result = await captureWithLoading(root, element, screenshotScale, opts);
+        const result = await capturePromiseWithLoading(root, retryCapture(), retryCapture, opts);
         resolve(result);
       });
     });
@@ -1182,14 +1225,20 @@ function escapeHtml(value: string): string {
 function showScreenshotOptions(
   root: HTMLElement,
   opts?: { allowSkip?: boolean }
-): Promise<'skip' | 'capture' | 'element' | 'area' | 'cancel'> {
+): Promise<ScreenshotChoice> {
   const fullPageDisabled = isFullPageDisabled();
+  const nativeViewportAvailable = fullPageDisabled && canCaptureViewportNatively();
   const allowSkip = opts?.allowSkip !== false;
 
   return new Promise(resolve => {
     const complexNote = fullPageDisabled
-      ? `<p style="margin: 0 0 12px; padding: 8px 12px; background: var(--bd-bg-secondary, #f5f5f5); border-radius: 6px; font-size: 13px; color: var(--bd-text-secondary);">This page is too complex for full-page or area capture. Select a specific element instead.</p>`
+      ? `<p style="margin: 0 0 12px; padding: 8px 12px; background: var(--bd-bg-secondary, #f5f5f5); border-radius: 6px; font-size: 13px; color: var(--bd-text-secondary);">${nativeViewportAvailable ? 'This page is too complex for full-page or area capture. Capture the visible viewport or select a specific element instead.' : 'This page is too complex for full-page or area capture. Select a specific element instead.'}</p>`
       : '';
+    const primaryCaptureButton = fullPageDisabled
+      ? nativeViewportAvailable
+        ? '<button class="bd-btn bd-btn-primary" data-action="viewport">Capture Viewport</button>'
+        : ''
+      : '<button class="bd-btn bd-btn-primary" data-action="capture">Full Page</button>';
 
     const modal = createModal(
       root,
@@ -1198,7 +1247,7 @@ function showScreenshotOptions(
         <p style="margin: 0 0 16px; color: var(--bd-text-secondary);">Choose what to capture:</p>
         ${complexNote}
         <div class="bd-actions bd-screenshot-actions">
-          ${fullPageDisabled ? '' : '<button class="bd-btn bd-btn-primary" data-action="capture">Full Page</button>'}
+          ${primaryCaptureButton}
           ${fullPageDisabled ? '' : '<button class="bd-btn bd-btn-secondary" data-action="area">Select Area</button>'}
           <button class="bd-btn bd-btn-secondary" data-action="element">Select Element</button>
           ${allowSkip ? '<button class="bd-btn bd-btn-quiet" data-action="skip">Skip Screenshot</button>' : ''}
@@ -1211,6 +1260,7 @@ function showScreenshotOptions(
     const elementBtn = modal.querySelector('[data-action="element"]') as HTMLElement;
     const areaBtn = modal.querySelector('[data-action="area"]') as HTMLElement;
     const captureBtn = modal.querySelector('[data-action="capture"]') as HTMLElement;
+    const viewportBtn = modal.querySelector('[data-action="viewport"]') as HTMLElement;
 
     closeBtn?.addEventListener('click', () => {
       modal.remove();
@@ -1235,6 +1285,12 @@ function showScreenshotOptions(
     captureBtn?.addEventListener('click', () => {
       modal.remove();
       resolve('capture');
+    });
+
+    viewportBtn?.addEventListener('click', () => {
+      modal.remove();
+      const capture = beginViewportCapture();
+      resolve({ type: 'viewport', capture });
     });
   });
 }

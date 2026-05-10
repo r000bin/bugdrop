@@ -2202,6 +2202,17 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     }`;
   }
 
+  function mockGetDisplayMedia(page: Page, body: string) {
+    return page.addInitScript(`
+      Object.defineProperty(navigator, 'mediaDevices', {
+        value: {
+          getDisplayMedia: ${body}
+        },
+        configurable: true
+      });
+    `);
+  }
+
   function reporterLikePng(
     variant: 'preview-size' | 'small-wide-area' | 'annotation-style' | 'undo'
   ) {
@@ -2703,10 +2714,16 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
 
   // --- Full-page disable threshold (10k+ nodes) ---
 
-  test('hides Full Page and Select Area buttons on very complex pages (>10k nodes)', async ({
+  test('hides Full Page and Select Area buttons on very complex pages without native viewport capture', async ({
     page,
   }) => {
     await mockHtmlToImage(page, spyToPng());
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'mediaDevices', {
+        value: {},
+        configurable: true,
+      });
+    });
     await page.goto('/test/complex-dom.html?nodes=12000');
 
     const nodeCount = await page.evaluate(() => document.body.querySelectorAll('*').length);
@@ -2724,6 +2741,177 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     // Complexity notice should be shown
     const notice = host.locator('css=p >> text=too complex');
     await expect(notice).toBeVisible();
+  });
+
+  test('offers native viewport capture on very complex secure-context pages', async ({ page }) => {
+    const payloads = await trackFeedbackPayloads(page);
+    await mockHtmlToImage(
+      page,
+      "function() { throw new Error('html-to-image should not run for viewport capture'); }"
+    );
+    await mockGetDisplayMedia(
+      page,
+      `function(opts) {
+        window.__viewportCaptureCalls = (window.__viewportCaptureCalls || 0) + 1;
+        window.__viewportCaptureUserActivation = navigator.userActivation.isActive;
+        window.__viewportCaptureOpts = opts;
+        var canvas = document.createElement('canvas');
+        canvas.width = 960;
+        canvas.height = 540;
+        var ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#101827';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#22d3ee';
+        ctx.fillRect(40, 40, 880, 120);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 42px sans-serif';
+        ctx.fillText('Native viewport capture', 80, 115);
+        var stream = canvas.captureStream();
+        var track = stream.getVideoTracks()[0];
+        var originalStop = track.stop.bind(track);
+        track.getSettings = function() { return { displaySurface: 'browser' }; };
+        track.stop = function() {
+          window.__viewportTrackStops = (window.__viewportTrackStops || 0) + 1;
+          originalStop();
+        };
+        return Promise.resolve(stream);
+      }`
+    );
+    await page.goto('/test/complex-dom.html?nodes=12000');
+
+    const nodeCount = await page.evaluate(() => document.body.querySelectorAll('*').length);
+    expect(nodeCount).toBeGreaterThanOrEqual(10000);
+
+    const host = await navigateToScreenshotOptions(page);
+
+    const viewportBtn = host.locator('css=[data-action="viewport"]');
+    await expect(viewportBtn).toBeVisible();
+    await expect(viewportBtn).toHaveText('Capture Viewport');
+    await expect(host.locator('css=[data-action="capture"]')).not.toBeAttached();
+    await expect(host.locator('css=[data-action="area"]')).not.toBeAttached();
+    await expect(host.locator('css=p >> text=visible viewport')).toBeVisible();
+
+    await viewportBtn.click();
+
+    await expect(host.locator('css=.bd-modal--annotator')).toBeVisible({ timeout: 10000 });
+    await expect(host.locator('css=#annotation-canvas canvas')).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as Window & { __viewportCaptureCalls?: number }).__viewportCaptureCalls || 0
+        )
+      )
+      .toBe(1);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as Window & { __viewportTrackStops?: number }).__viewportTrackStops || 0
+        )
+      )
+      .toBe(1);
+    const viewportCapture = await page.evaluate(() => {
+      const win = window as Window & {
+        __viewportCaptureOpts?: DisplayMediaStreamOptions & { preferCurrentTab?: boolean };
+        __viewportCaptureUserActivation?: boolean;
+      };
+      return {
+        opts: win.__viewportCaptureOpts,
+        userActivation: win.__viewportCaptureUserActivation,
+      };
+    });
+    expect(viewportCapture.userActivation).toBe(true);
+    expect(viewportCapture.opts).toEqual({
+      video: { displaySurface: 'browser' },
+      audio: false,
+      preferCurrentTab: true,
+    });
+    const captureOpts = await page.evaluate(
+      () => (window as Window & { __captureOpts?: unknown }).__captureOpts
+    );
+    expect(captureOpts).toBeUndefined();
+
+    await host.locator('css=[data-action="done"]').click();
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0].screenshot).toEqual(expect.stringMatching(/^data:image\/png;base64,/));
+  });
+
+  test('retries native viewport capture from the capture error modal', async ({ page }) => {
+    await mockGetDisplayMedia(
+      page,
+      `function() {
+        window.__viewportCaptureCalls = (window.__viewportCaptureCalls || 0) + 1;
+        if (window.__viewportCaptureCalls === 1) {
+          return Promise.reject(new Error('Permission denied'));
+        }
+        var canvas = document.createElement('canvas');
+        canvas.width = 2;
+        canvas.height = 2;
+        canvas.getContext('2d').fillRect(0, 0, 2, 2);
+        var stream = canvas.captureStream();
+        stream.getVideoTracks()[0].getSettings = function() { return { displaySurface: 'browser' }; };
+        return Promise.resolve(stream);
+      }`
+    );
+    await page.goto('/test/complex-dom.html?nodes=12000');
+
+    const host = await navigateToScreenshotOptions(page);
+    await host.locator('css=[data-action="viewport"]').click();
+
+    const errorText = host.locator('css=.bd-error-message__text');
+    await expect(errorText).toBeVisible({ timeout: 5000 });
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as Window & { __viewportCaptureCalls?: number }).__viewportCaptureCalls || 0
+        )
+      )
+      .toBe(1);
+
+    await host.locator('css=[data-action="retry"]').click();
+
+    await expect(host.locator('css=.bd-modal--annotator')).toBeVisible({ timeout: 10000 });
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as Window & { __viewportCaptureCalls?: number }).__viewportCaptureCalls || 0
+        )
+      )
+      .toBe(2);
+  });
+
+  test('rejects non-browser native capture surfaces before annotation', async ({ page }) => {
+    await mockGetDisplayMedia(
+      page,
+      `function() {
+        var canvas = document.createElement('canvas');
+        canvas.width = 2;
+        canvas.height = 2;
+        var stream = canvas.captureStream();
+        var track = stream.getVideoTracks()[0];
+        var originalStop = track.stop.bind(track);
+        track.getSettings = function() { return { displaySurface: 'monitor' }; };
+        track.stop = function() {
+          window.__viewportTrackStops = (window.__viewportTrackStops || 0) + 1;
+          originalStop();
+        };
+        return Promise.resolve(stream);
+      }`
+    );
+    await page.goto('/test/complex-dom.html?nodes=12000');
+
+    const host = await navigateToScreenshotOptions(page);
+    await host.locator('css=[data-action="viewport"]').click();
+
+    await expect(host.locator('css=.bd-error-message__text')).toBeVisible({ timeout: 5000 });
+    await expect(host.locator('css=.bd-modal--annotator')).not.toBeAttached();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as Window & { __viewportTrackStops?: number }).__viewportTrackStops || 0
+        )
+      )
+      .toBe(1);
   });
 
   test('remembers complex-page screenshot skip for issue #116 repeated reports', async ({
