@@ -82,6 +82,19 @@ async function openScreenshotOptions(page: Page, title: string) {
   return host;
 }
 
+async function trackLiveFeedbackPayloads(page: Page) {
+  const payloads: Array<Record<string, unknown>> = [];
+  await page.route('**/feedback', async route => {
+    payloads.push(route.request().postDataJSON());
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, issueNumber: 1, issueUrl: '#', isPublic: false }),
+    });
+  });
+  return payloads;
+}
+
 async function countRedPixelsInRegion(
   canvas: Locator,
   region: { left: number; top: number; right: number; bottom: number }
@@ -116,6 +129,93 @@ async function countRedPixelsInRegion(
 
     return red;
   }, region);
+}
+
+async function countBlackPixelsInRegion(
+  canvas: Locator,
+  region: { left: number; top: number; right: number; bottom: number }
+) {
+  return canvas.evaluate((el, targetRegion) => {
+    const source = el as HTMLCanvasElement;
+    const ctx = source.getContext('2d');
+    if (!ctx) {
+      throw new Error('Missing canvas context');
+    }
+
+    const xStart = Math.floor(source.width * targetRegion.left);
+    const xEnd = Math.ceil(source.width * targetRegion.right);
+    const yStart = Math.floor(source.height * targetRegion.top);
+    const yEnd = Math.ceil(source.height * targetRegion.bottom);
+    const { data, width } = ctx.getImageData(xStart, yStart, xEnd - xStart, yEnd - yStart);
+    let black = 0;
+
+    for (let y = 0; y < yEnd - yStart; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4;
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const a = data[i + 3];
+
+        if (a > 200 && r < 20 && g < 20 && b < 20) {
+          black++;
+        }
+      }
+    }
+
+    return black;
+  }, region);
+}
+
+async function countBlackPixelsInDataUrl(
+  page: Page,
+  dataUrl: string,
+  region: { left: number; top: number; right: number; bottom: number }
+) {
+  return page.evaluate(
+    async target => {
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Failed to load screenshot payload'));
+        img.src = target.dataUrl;
+      });
+
+      const source = document.createElement('canvas');
+      source.width = img.width;
+      source.height = img.height;
+      const ctx = source.getContext('2d');
+      if (!ctx) {
+        throw new Error('Missing canvas context');
+      }
+
+      ctx.drawImage(img, 0, 0);
+
+      const xStart = Math.floor(source.width * target.region.left);
+      const xEnd = Math.ceil(source.width * target.region.right);
+      const yStart = Math.floor(source.height * target.region.top);
+      const yEnd = Math.ceil(source.height * target.region.bottom);
+      const { data, width } = ctx.getImageData(xStart, yStart, xEnd - xStart, yEnd - yStart);
+      let black = 0;
+
+      for (let y = 0; y < yEnd - yStart; y++) {
+        for (let x = 0; x < width; x++) {
+          const i = (y * width + x) * 4;
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          const a = data[i + 3];
+
+          if (a > 200 && r < 20 && g < 20 && b < 20) {
+            black++;
+          }
+        }
+      }
+
+      return black;
+    },
+    { dataUrl, region }
+  );
 }
 
 async function dragOnCanvas(
@@ -421,6 +521,49 @@ test.describe('Screenshot Capture (Live)', () => {
 
     expect(await countRedPixelsInRegion(canvas, firstRegion)).toBeGreaterThan(20);
     expect(await countRedPixelsInRegion(canvas, latestRegion)).toBeLessThan(5);
+  });
+
+  test('redaction works on the deployed preview widget', async ({ page }) => {
+    const payloads = await trackLiveFeedbackPayloads(page);
+    await mockLiveScreenshotCapture(page);
+    const host = await openScreenshotOptions(page, 'Live preview redaction');
+
+    const captureBtn = host.locator('css=[data-action="capture"]');
+    await expect(captureBtn).toBeVisible({ timeout: 5_000 });
+    await captureBtn.click();
+
+    const canvas = host.locator('css=#annotation-canvas canvas');
+    await expect(host.locator('css=.bd-modal--annotator')).toBeVisible({ timeout: 10_000 });
+    await expect(canvas).toBeVisible({ timeout: 10_000 });
+    await expect.poll(() => canvas.evaluate(el => (el as HTMLCanvasElement).width)).toBe(600);
+
+    await host.locator('css=[data-tool="redact"]').click();
+    await dragOnCanvas(page, canvas, { x: 0.18, y: 0.28 }, { x: 0.42, y: 0.68 });
+    await dragOnCanvas(page, canvas, { x: 0.58, y: 0.28 }, { x: 0.82, y: 0.68 });
+
+    const firstRegion = { left: 0.1, top: 0.18, right: 0.48, bottom: 0.78 };
+    const latestRegion = { left: 0.52, top: 0.18, right: 0.9, bottom: 0.78 };
+
+    expect(await countBlackPixelsInRegion(canvas, firstRegion)).toBeGreaterThan(1000);
+    expect(await countBlackPixelsInRegion(canvas, latestRegion)).toBeGreaterThan(1000);
+
+    await host.locator('css=[data-action="undo"]').click();
+
+    expect(await countBlackPixelsInRegion(canvas, firstRegion)).toBeGreaterThan(1000);
+    expect(await countBlackPixelsInRegion(canvas, latestRegion)).toBeLessThan(20);
+
+    await host.locator('css=[data-action="done"]').click();
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10_000 });
+
+    expect(payloads).toHaveLength(1);
+    const submittedScreenshot = payloads[0].screenshot;
+    expect(typeof submittedScreenshot).toBe('string');
+    expect(
+      await countBlackPixelsInDataUrl(page, submittedScreenshot as string, firstRegion)
+    ).toBeGreaterThan(1000);
+    expect(
+      await countBlackPixelsInDataUrl(page, submittedScreenshot as string, latestRegion)
+    ).toBeLessThan(20);
   });
 });
 
