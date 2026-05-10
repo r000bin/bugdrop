@@ -45,12 +45,13 @@ Since BugDrop uses Shadow DOM for isolation, it does not conflict with any frame
 BugDrop uses [html2canvas](https://html2canvas.hertzen.com/) to capture screenshots entirely on the client side. When a user clicks the screenshot button:
 
 1. html2canvas renders the current page to an HTML Canvas element in the user's browser
-2. The canvas is converted to a PNG image
-3. The image is sent to the BugDrop API along with the form submission
-4. The API commits the image to the `bugdrop-screenshots` branch in your GitHub repository
-5. A link to the screenshot is included in the GitHub Issue
+2. In optional and required manual screenshot flows, the user can annotate the screenshot and cover sensitive regions with opaque blocks
+3. The canvas is converted to a PNG image
+4. The image is sent to the BugDrop API along with the form submission
+5. The API commits the image to the `bugdrop-screenshots` branch in your GitHub repository
+6. A link to the screenshot is included in the GitHub Issue
 
-No server-side rendering or page access is involved. The screenshot captures exactly what the user sees in their browser at the time of submission.
+No server-side rendering or page access is involved. The initial capture is rendered from the current page in the user's browser. In manual flows, the submitted PNG may include user annotations or opaque redaction blocks. Auto screenshots upload without a user redaction step.
 
 ### Are screenshots stored securely?
 

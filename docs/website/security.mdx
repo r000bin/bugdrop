@@ -55,9 +55,12 @@ Treat screenshots as unauthenticated user-generated content. The hosted service 
 
 Screenshots are captured client-side using [html2canvas](https://html2canvas.hertzen.com/), which renders the current page to a canvas element in the user's browser. The canvas is then converted to a PNG image and uploaded. This means:
 
-- The screenshot captures what the user actually sees
+- The initial screenshot capture is rendered from what the user actually sees
 - No server-side rendering or page access is required
 - The screenshot is generated entirely in the user's browser before being sent to the API
+- Users can redact additional screenshot regions before submitting when using the manual screenshot flow
+
+Manual redaction is user-driven and does not automatically detect sensitive content. It complements, but does not replace, developer-configured masking for fields that should never appear in screenshots, especially when using automatic screenshots.
 
 Because clients are untrusted, the API validates screenshot uploads server-side before storing them. BugDrop currently accepts PNG data URLs only and rejects SVG, malformed base64, oversized payloads, and data that does not have a PNG file signature.
 

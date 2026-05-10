@@ -1,4 +1,4 @@
-export type Tool = 'draw' | 'arrow' | 'rect' | 'text';
+export type Tool = 'draw' | 'arrow' | 'rect' | 'redact';
 
 interface Point {
   x: number;
@@ -6,9 +6,12 @@ interface Point {
 }
 
 const ANNOTATION_COLOR = '#ff0000';
+const REDACTION_COLOR = '#000000';
 const VISIBLE_ANNOTATION_LINE_WIDTH = 5.5;
 const ARROW_HEAD_ANGLE = Math.PI / 7;
 const MIN_ANNOTATION_DISTANCE = 2;
+const MIN_REDACTION_SIZE = 4;
+const REDACTION_PADDING = 1;
 
 export function createAnnotator(
   container: HTMLElement,
@@ -81,9 +84,11 @@ export function createAnnotator(
     const rect = canvas.getBoundingClientRect();
     const scaleX = img.width / rect.width;
     const scaleY = img.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
     return {
-      x: (e.clientX - rect.left) * scaleX,
-      y: (e.clientY - rect.top) * scaleY,
+      x: Math.max(0, Math.min(canvas.width, x)),
+      y: Math.max(0, Math.min(canvas.height, y)),
     };
   }
 
@@ -137,6 +142,39 @@ export function createAnnotator(
     ctx.strokeRect(from.x, from.y, to.x - from.x, to.y - from.y);
   }
 
+  function getRectBounds(from: Point, to: Point) {
+    const x = Math.min(from.x, to.x);
+    const y = Math.min(from.y, to.y);
+    const width = Math.abs(to.x - from.x);
+    const height = Math.abs(to.y - from.y);
+    return { x, y, width, height };
+  }
+
+  function getRedactionBounds(from: Point, to: Point) {
+    const { x, y, width, height } = getRectBounds(from, to);
+    const left = Math.max(0, Math.floor(x) - REDACTION_PADDING);
+    const top = Math.max(0, Math.floor(y) - REDACTION_PADDING);
+    const right = Math.min(canvas.width, Math.ceil(x + width) + REDACTION_PADDING);
+    const bottom = Math.min(canvas.height, Math.ceil(y + height) + REDACTION_PADDING);
+    return {
+      x: left,
+      y: top,
+      width: Math.max(0, right - left),
+      height: Math.max(0, bottom - top),
+    };
+  }
+
+  function isMeaningfulRedaction(from: Point, to: Point) {
+    const { width, height } = getRedactionBounds(from, to);
+    return width >= MIN_REDACTION_SIZE && height >= MIN_REDACTION_SIZE;
+  }
+
+  function drawRedaction(from: Point, to: Point) {
+    const { x, y, width, height } = getRedactionBounds(from, to);
+    ctx.fillStyle = REDACTION_COLOR;
+    ctx.fillRect(x, y, width, height);
+  }
+
   function handleMouseDown(e: MouseEvent) {
     const base = getLatestState();
     if (!base) return;
@@ -158,13 +196,15 @@ export function createAnnotator(
       points.push(point);
       hasDrawnStroke = hasDrawnStroke || getDistance(points[0], point) >= MIN_ANNOTATION_DISTANCE;
     } else {
-      // Preview for arrow/rect
+      // Preview for shape-like tools.
       restoreState(draftBase);
 
       if (currentTool === 'arrow') {
         drawArrow(points[0], point);
       } else if (currentTool === 'rect') {
         drawRect(points[0], point);
+      } else if (currentTool === 'redact') {
+        drawRedaction(points[0], point);
       }
     }
   }
@@ -178,7 +218,9 @@ export function createAnnotator(
     const point = getCanvasPoint(e);
     const start = points[0];
     const isMeaningfulAnnotation =
-      hasDrawnStroke || getDistance(start, point) >= MIN_ANNOTATION_DISTANCE;
+      currentTool === 'redact'
+        ? isMeaningfulRedaction(start, point)
+        : hasDrawnStroke || getDistance(start, point) >= MIN_ANNOTATION_DISTANCE;
 
     if (!isMeaningfulAnnotation) {
       restoreState(draftBase);
@@ -192,6 +234,9 @@ export function createAnnotator(
     } else if (currentTool === 'rect') {
       restoreState(draftBase);
       drawRect(start, point);
+    } else if (currentTool === 'redact') {
+      restoreState(draftBase);
+      drawRedaction(start, point);
     } else if (currentTool === 'draw' && !hasDrawnStroke) {
       drawLine(start, point);
     }

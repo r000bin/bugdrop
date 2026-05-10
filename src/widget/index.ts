@@ -1179,7 +1179,7 @@ function getScreenshotFormControl(
   if (config.screenshotMode === 'auto') {
     return `
       <p style="margin: 8px 0 0; color: var(--bd-text-secondary); font-size: 0.95rem;">
-        📸 A screenshot will be attached automatically.
+        📸 A screenshot will be attached automatically without preview or manual redaction.
       </p>
     `;
   }
@@ -1302,12 +1302,16 @@ function showAnnotationStep(
   return new Promise(resolve => {
     const modal = createModal(
       root,
-      'Annotate Screenshot',
+      'Review Screenshot',
       `
+        <p style="margin: 0 0 12px; color: var(--bd-text-secondary); font-size: 13px;">
+          Cover sensitive areas before submitting. Redactions are baked into the uploaded image.
+        </p>
         <div class="bd-tools">
           <button class="bd-tool active" data-tool="draw">✏️ Draw</button>
           <button class="bd-tool" data-tool="arrow">➡️ Arrow</button>
           <button class="bd-tool" data-tool="rect">▢ Rectangle</button>
+          <button class="bd-tool" data-tool="redact">Redact</button>
           <button class="bd-tool" data-action="undo">↶ Undo</button>
         </div>
         <div id="annotation-canvas" class="bd-annotation-stage"></div>
