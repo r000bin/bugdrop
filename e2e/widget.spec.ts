@@ -3925,4 +3925,155 @@ test.describe('Screenshot Masking', () => {
     const cy = Math.floor((rect.y + rect.h / 2) * pr);
     expect(await pixelAt(page, screenshot, cx, cy)).toEqual([0, 0, 0, 255]);
   });
+
+  // Walk the element-picker flow and capture the chosen element.
+  //
+  // `selector` identifies the element to click in the picker.  Because the picker
+  // resolves the DEEPEST element at the click point (via elementsFromPoint), pass
+  // `clickOffset` to land on the element's own padding rather than a child.
+  // Defaults to the element's center.
+  //
+  // Returns the screenshot data URL and the image's natural pixel dimensions.
+  // Dimensions are read from the image itself so they are always consistent with
+  // the actual pixels — html-to-image uses clientWidth/clientHeight which can
+  // differ from offsetWidth/offsetHeight when layout changes during capture.
+  async function submitFeedbackWithElementCapture(
+    page: Page,
+    fixturePath: string,
+    selector: string,
+    clickOffset?: { x: number; y: number }
+  ): Promise<{ screenshot: string; imageSize: { w: number; h: number } }> {
+    let payload: Record<string, unknown> | null = null;
+    await page.route('**/api/check/**', async route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ installed: true }),
+      })
+    );
+    await page.route('**/feedback', async route => {
+      payload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, issueNumber: 1, issueUrl: '#', isPublic: false }),
+      });
+    });
+
+    await page.goto(fixturePath);
+    const host = page.locator('#bugdrop-host');
+
+    await host.locator('css=.bd-trigger').waitFor();
+    await host.locator('css=.bd-trigger').click();
+    await host.locator('css=[data-action="continue"]').click();
+    await host.locator('css=#title').fill('Element scope test');
+    await host.locator('css=#include-screenshot').check();
+    await host.locator('css=#submit-btn').click();
+
+    // Choose "Select Element".
+    await host.locator('css=[data-action="element"]').click();
+
+    // Wait for the element picker tooltip to confirm picker mode is active.
+    await expect(page.locator('#bugdrop-element-picker-tooltip')).toBeVisible({ timeout: 5000 });
+
+    // Click the target element using mouse coordinates.  The picker intercepts
+    // pointer events at document level via elementsFromPoint, which returns the
+    // DEEPEST element at the cursor — use clickOffset to land on the element's
+    // own padding when you need to select the element rather than a child.
+    const target = page.locator(selector);
+    await expect(target).toBeVisible({ timeout: 5000 });
+    const targetBox = await target.boundingBox();
+    if (!targetBox) throw new Error(`element not found or has no bounding box: ${selector}`);
+    const clickX = targetBox.x + (clickOffset?.x ?? targetBox.width / 2);
+    const clickY = targetBox.y + (clickOffset?.y ?? targetBox.height / 2);
+    await page.mouse.move(clickX, clickY);
+    await page.mouse.click(clickX, clickY);
+
+    // Wait for annotation step.
+    await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 30000 });
+    await host.locator('css=[data-action="done"]').click();
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+
+    if (!payload) throw new Error('no payload captured');
+
+    const screenshot = payload.screenshot as string;
+
+    // Read the image's natural dimensions directly — these are ground truth for
+    // any coordinate computation.
+    const imageSize = await page.evaluate(
+      dataUrl =>
+        new Promise<{ w: number; h: number }>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+          img.onerror = () => reject(new Error('image load failed'));
+          img.src = dataUrl;
+        }),
+      screenshot
+    );
+
+    return { screenshot, imageSize };
+  }
+
+  test('element-scoped capture masks descendant inside picked element', async ({ page }) => {
+    // Click inside the top padding of #unmasked-parent (above the first <p> child)
+    // so the picker's elementsFromPoint resolves the parent, not a child element.
+    // The 16px top padding gives ~8px of safe click area before the first child.
+    const { screenshot, imageSize } = await submitFeedbackWithElementCapture(
+      page,
+      '/test/masking-nested.html',
+      '#unmasked-parent',
+      { x: 40, y: 8 } // 8px from top = within the 16px top padding
+    );
+
+    // Measure child geometry relative to the parent using the image's own scale.
+    // The image width / parent clientWidth gives the pixelRatio used by html-to-image.
+    const geometry = await page.evaluate(() => {
+      const parent = document.querySelector('#unmasked-parent') as HTMLElement;
+      const child = document.querySelector('#masked-child') as HTMLElement;
+      const p = parent.getBoundingClientRect();
+      const c = child.getBoundingClientRect();
+      return {
+        parentClientW: parent.clientWidth,
+        childRelX: c.left - p.left,
+        childRelY: c.top - p.top,
+        childW: c.width,
+        childH: c.height,
+      };
+    });
+
+    const pr = imageSize.w / geometry.parentClientW;
+    const cx = Math.floor((geometry.childRelX + geometry.childW / 2) * pr);
+    const cy = Math.floor((geometry.childRelY + geometry.childH / 2) * pr);
+
+    // Sanity check: the child must fall within the captured image height.
+    expect(cy).toBeLessThan(imageSize.h);
+    expect(await pixelAt(page, screenshot, cx, cy)).toEqual([0, 0, 0, 255]);
+  });
+
+  test('element-scoped capture masks the picked element itself', async ({ page }) => {
+    const { screenshot, imageSize } = await submitFeedbackWithElementCapture(
+      page,
+      '/test/masking-nested.html',
+      '#outer-masked'
+    );
+
+    // The mask covers the entire captured image (root element is masked).
+    // Use the image center — guaranteed in-bounds regardless of pixelRatio.
+    const cx = Math.floor(imageSize.w / 2);
+    const cy = Math.floor(imageSize.h / 2);
+    expect(await pixelAt(page, screenshot, cx, cy)).toEqual([0, 0, 0, 255]);
+  });
+
+  test('element-scoped capture masks a picked password input', async ({ page }) => {
+    const { screenshot, imageSize } = await submitFeedbackWithElementCapture(
+      page,
+      '/test/masking-basic.html',
+      '#password'
+    );
+
+    // The mask covers the entire captured image (password input is masked at root).
+    const cx = Math.floor(imageSize.w / 2);
+    const cy = Math.floor(imageSize.h / 2);
+    expect(await pixelAt(page, screenshot, cx, cy)).toEqual([0, 0, 0, 255]);
+  });
 });
