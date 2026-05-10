@@ -101,9 +101,9 @@ BugDrop needs to initialize synchronously to ensure the widget is ready as early
 
 ## Configuration
 
-### Does BugDrop support custom labels?
+### Can I customize the feedback button label?
 
-Yes. The `data-label` attribute adds a text label next to the button icon:
+Yes. The `data-label` attribute changes the text displayed next to the button icon:
 
 ```html
 <script src="https://bugdrop.neonwatty.workers.dev/widget.js"
@@ -120,9 +120,21 @@ You can also set `data-icon="none"` to show only the text label without an icon:
   data-label="Report a Bug"></script>
 ```
 
+### Can I customize GitHub issue labels?
+
+Yes. Self-hosted deployments can map the three built-in categories to custom GitHub labels with `data-category-labels` when `ALLOW_CLIENT_CATEGORY_LABELS` is set to `"true"`:
+
+```html
+<script src="https://bugdrop.neonwatty.workers.dev/widget.js"
+  data-repo="owner/repo"
+  data-category-labels='{"bug":"defect","feature":["product-feedback","triage"],"question":"support"}'></script>
+```
+
+Hosted deployments use server-side `CATEGORY_LABELS` configuration instead of trusting labels from public browser requests. Every issue still receives the `bugdrop` label.
+
 ### Can I customize the feedback categories?
 
-The three categories (Bug, Feature Request, and Question) are built into the widget and cannot currently be customized through data attributes. Each category maps to a GitHub label (`bug`, `enhancement`, and `question` respectively). If you need custom categories, consider [self-hosting](/docs/self-hosting) and modifying the widget source code.
+The three categories (Bug, Feature Request, and Question) are built into the widget and cannot currently be renamed or replaced through data attributes. You can customize which GitHub labels those categories apply.
 
 ### Can I collect the user's name and email?
 

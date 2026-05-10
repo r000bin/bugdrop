@@ -2410,6 +2410,57 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     await expect(titleInput).toHaveValue(title);
   }
 
+  test('sends custom category label mapping while keeping built-in category UI', async ({
+    page,
+  }) => {
+    const payloads = await trackFeedbackPayloads(page);
+    const categoryLabels = encodeURIComponent(
+      JSON.stringify({
+        bug: ['defect', 'frontend'],
+        feature: 'product-feedback',
+        question: 'support',
+      })
+    );
+
+    await page.goto(`/test/?categoryLabels=${categoryLabels}`);
+    const host = await navigateToForm(page, 'Custom label mapping test');
+
+    await expect(host.locator('css=input[name="category"][value="bug"]')).toBeAttached();
+    await expect(host.locator('css=input[name="category"][value="feature"]')).toBeAttached();
+    await expect(host.locator('css=input[name="category"][value="question"]')).toBeAttached();
+
+    await host.locator('css=input[name="category"][value="feature"]').click();
+    await host.locator('css=#include-screenshot').uncheck();
+    await host.locator('css=#submit-btn').click();
+
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+    expect(payloads[0]?.category).toBe('feature');
+    expect(payloads[0]?.categoryLabels).toEqual({
+      bug: ['defect', 'frontend'],
+      feature: 'product-feedback',
+      question: 'support',
+    });
+  });
+
+  test('malformed category label mapping does not block submission', async ({ page }) => {
+    const payloads = await trackFeedbackPayloads(page);
+    const warnings: string[] = [];
+    page.on('console', msg => {
+      if (msg.type() === 'warning') warnings.push(msg.text());
+    });
+
+    await page.goto('/test/?categoryLabels=%7Bbad-json');
+    const host = await navigateToForm(page, 'Malformed label mapping test');
+
+    await host.locator('css=#include-screenshot').uncheck();
+    await host.locator('css=#submit-btn').click();
+
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+    expect(payloads[0]?.category).toBe('bug');
+    expect(payloads[0]?.categoryLabels).toBeUndefined();
+    expect(warnings.some(w => w.startsWith('[BugDrop] Invalid data-category-labels'))).toBe(true);
+  });
+
   async function countAnnotationPixels(canvas: ReturnType<Page['locator']>) {
     return canvas.evaluate(el => {
       const source = el as HTMLCanvasElement;

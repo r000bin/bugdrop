@@ -3,6 +3,21 @@ import type { Env, GitHubIssue } from '../types';
 
 const GITHUB_API = 'https://api.github.com';
 
+/**
+ * Thrown when GitHub rejects an issue creation specifically due to invalid
+ * labels — the only failure for which the caller may safely retry with
+ * default labels. Distinguishing this from a generic API error prevents
+ * fragile substring matching on error messages.
+ */
+export class GitHubLabelError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'GitHubLabelError';
+    this.status = status;
+  }
+}
+
 const headers = (token: string) => ({
   Authorization: `Bearer ${token}`,
   Accept: 'application/vnd.github+json',
@@ -80,11 +95,31 @@ export async function createIssue(
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Failed to create issue: ${response.status} - ${error}`);
+    const errorText = await response.text();
+    if (response.status === 422 && isLabelValidationFailure(errorText)) {
+      throw new GitHubLabelError(`GitHub rejected labels: ${errorText}`, response.status);
+    }
+    throw new Error(`Failed to create issue: ${response.status} - ${errorText}`);
   }
 
   return response.json();
+}
+
+/**
+ * GitHub returns 422 with `{"errors":[{"field":"labels",...}]}` when an issue
+ * is rejected for invalid/non-existent labels. Parse the structured response
+ * rather than substring-matching the message — substring matches over user-
+ * controlled error text drift silently.
+ */
+function isLabelValidationFailure(body: string): boolean {
+  try {
+    const parsed = JSON.parse(body) as {
+      errors?: Array<{ field?: unknown }>;
+    };
+    return Array.isArray(parsed.errors) && parsed.errors.some(e => e?.field === 'labels');
+  } catch {
+    return false;
+  }
 }
 
 /**

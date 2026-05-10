@@ -14,6 +14,7 @@ These attributes control the fundamental behavior of the widget.
 | `data-color` | `"#7c3aed"` | Primary accent color (any CSS color value) |
 | `data-icon` | *(default bug icon)* | Custom icon: URL to an image, `"none"` to hide, or omit for default |
 | `data-label` | `""` | Text label displayed next to the button icon |
+| `data-category-labels` | built-in labels | Self-hosted JSON mapping from built-in categories to GitHub labels |
 | `data-button` | `"true"` | Show the floating button: `"true"` or `"false"` |
 | `data-welcome` | `"Report a bug or request a feature"` | Welcome message displayed at the top of the form |
 
@@ -112,7 +113,7 @@ When a user dismisses the button:
 
 ## Feedback Categories
 
-Users can choose from three feedback categories when submitting a report. Each category maps to a specific GitHub label:
+Users can choose from three feedback categories when submitting a report. By default, each category maps to a specific GitHub label:
 
 | Category | Emoji | GitHub Label | Description |
 |----------|-------|-------------|-------------|
@@ -120,7 +121,73 @@ Users can choose from three feedback categories when submitting a report. Each c
 | Feature | :sparkles: | `enhancement` | A new feature or improvement request |
 | Question | :question: | `question` | A question about the product or usage |
 
-These categories are built into the widget and cannot be customized at this time. The corresponding GitHub labels are created automatically in your repository if they do not already exist.
+These categories are built into the widget. Self-hosted deployments can customize which GitHub labels each category applies. There are two configuration paths:
+
+### Server-side mapping (recommended)
+
+Set `CATEGORY_LABELS` on your worker. The mapping is authoritative — clients cannot override it. Two shapes are supported:
+
+**Flat shape** — same labels for every repo your worker serves:
+
+```json
+{
+  "bug": ["defect", "frontend"],
+  "feature": "product-feedback",
+  "question": "support"
+}
+```
+
+**Per-repo shape** — different labels per repo, with an optional `"*"` wildcard fallback:
+
+```json
+{
+  "acme-corp/my-app": {
+    "bug": ["defect", "frontend"],
+    "feature": "product-feedback"
+  },
+  "acme-corp/docs": {
+    "bug": "docs-bug"
+  },
+  "*": {
+    "bug": "triage"
+  }
+}
+```
+
+The shape is detected automatically: keys containing `/` or equal to `*` mean per-repo; otherwise it's treated as flat.
+
+### Client-side mapping (self-hosts only, opt-in)
+
+Self-hosted deployments can also let pages set labels via the `data-category-labels` attribute. This is **disabled by default** because it lets any page that loads your worker dictate which labels appear on issues. Enable it by setting `ALLOW_CLIENT_CATEGORY_LABELS` to the literal string `"true"` (case-sensitive — values like `"True"`, `"1"`, or `"yes"` keep the gate closed):
+
+```html
+<script
+  src="https://bugdrop.neonwatty.workers.dev/widget.js"
+  data-repo="acme-corp/my-app"
+  data-category-labels='{"bug":["defect","frontend"],"feature":"product-feedback","question":"support"}'
+></script>
+```
+
+Only enable this when your worker's `ALLOWED_ORIGINS` is locked down to trusted domains.
+
+### Rules and behavior
+
+- Recognized keys: `bug`, `feature`, `question`. Other keys are ignored with a warning.
+- Each category accepts a single label string or an array of 1-5 strings; each label must be 1-50 characters after trimming (GitHub's limit). Labels containing control characters are rejected.
+- Every issue also receives the `bugdrop` label (always added).
+- **Precedence**: when both server and client mappings are present, `CATEGORY_LABELS` wins.
+- **Fail-closed on misconfig**: if `CATEGORY_LABELS` is set but unusable (malformed JSON, wrong shape, or a per-repo map with no entry for the current repo and no `"*"` fallback), the worker uses default labels and emits a warning — it does **not** silently fall back to `data-category-labels`. This keeps a typo from handing label control back to the browser.
+- **GitHub rejection retry**: if GitHub rejects a configured label (e.g. it doesn't exist in the repo), BugDrop retries once with default labels and embeds a label-mapping warning in the issue body.
+- **Warnings in the response**: if any warnings were emitted, the `/feedback` JSON success response includes a `labelMappingWarnings: string[]` field so callers can surface configuration issues programmatically.
+
+### Troubleshooting
+
+| Symptom | Likely cause |
+|---------|--------------|
+| Issues are filed with default labels (`bug`, `enhancement`, `question`) instead of yours | `CATEGORY_LABELS` JSON is malformed, the shape is wrong, or the per-repo map has no entry for this repo and no `"*"` fallback. Check the issue body for a `## Label mapping warning` section, or the worker logs for `[BugDrop] Category label config warnings`. |
+| `data-category-labels` is ignored | `ALLOW_CLIENT_CATEGORY_LABELS` is unset or not exactly the string `"true"`. Or `CATEGORY_LABELS` is also set, in which case it always wins. |
+| Some categories take effect but others don't | Unknown category keys (anything other than `bug`/`feature`/`question`) are dropped with a warning. Check spelling. |
+| GitHub returns a 422 | A configured label doesn't exist in the repo. BugDrop retries with default labels automatically; the issue still gets created and the rejection is recorded in the body. |
 
 ## Automatic System Information
 
