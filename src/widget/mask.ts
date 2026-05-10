@@ -11,6 +11,8 @@ const DEFAULT_SELECTOR =
 const COMBINED_SELECTOR = `${EXPLICIT_SELECTOR}, ${DEFAULT_SELECTOR}`;
 
 export function collectMaskRects(root: Element): MaskRect[] {
+  // seen guards against future manual collection paths (Task 4 walk + root.matches)
+  // revisiting an element. querySelectorAll alone never duplicates.
   const seen = new Set<Element>();
   const rects: MaskRect[] = [];
   const matches = root.querySelectorAll<HTMLElement>(COMBINED_SELECTOR);
