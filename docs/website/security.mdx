@@ -98,7 +98,7 @@ prevents gaps from CSS `gap` or non-masked siblings inside a masked container.
 **Built-in defaults.** These are always masked, with or without an explicit attribute:
 
 - `input[type="password"]`
-- Any input with `autocomplete="cc-number"`, `cc-csc`, or `cc-exp"`
+- Any input with `autocomplete="cc-number"`, `cc-csc`, or `cc-exp`
 
 **Known limitations:**
 
@@ -108,6 +108,12 @@ prevents gaps from CSS `gap` or non-masked siblings inside a masked container.
   sensitive elements between collection and the moment `html-to-image` finishes
   rendering, the mask may not cover the final pixels. Keep masked content stable during
   the brief capture window.
+- **Viewport capture fallback (very complex pages):** When the page exceeds the
+  full-page DOM-complexity threshold, BugDrop falls back to a screen-recording
+  capture (via the browser's `getDisplayMedia` API). That path captures the
+  visible viewport directly and does not apply element masks. If you rely on
+  masking, ensure the user is not capturing through this fallback when sensitive
+  elements are visible.
 
 The only network requests BugDrop makes are:
 
