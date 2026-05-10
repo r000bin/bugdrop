@@ -58,6 +58,25 @@ async function mockInstalledRepo(page: Page) {
   });
 }
 
+async function addCorsBlockedImage(page: Page) {
+  await page.route('https://third-party.test/no-cors-badge.svg', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'image/svg+xml',
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="180" height="44"><rect width="180" height="44" fill="#14b8a6"/><text x="16" y="28" fill="white" font-size="16">No CORS Badge</text></svg>',
+    });
+  });
+
+  await page.evaluate(() => {
+    const img = document.createElement('img');
+    img.alt = 'Third-party badge without CORS headers';
+    img.src = 'https://third-party.test/no-cors-badge.svg';
+    img.style.display = 'block';
+    img.style.margin = '24px';
+    document.body.prepend(img);
+  });
+}
+
 async function openScreenshotOptions(page: Page, title: string) {
   await mockInstalledRepo(page);
   await page.goto(process.env.LIVE_TARGET === 'preview' ? '/' : '/test/');
@@ -441,7 +460,7 @@ test.describe('Screenshot Capture (Live)', () => {
     await continueBtn.click();
 
     // Screenshot capture options should appear
-    const fullPageBtn = page.locator('#bugdrop-host').locator('css=[data-action="fullpage"]');
+    const fullPageBtn = page.locator('#bugdrop-host').locator('css=[data-action="capture"]');
     const elementBtn = page.locator('#bugdrop-host').locator('css=[data-action="element"]');
 
     // At least one screenshot option should be available
@@ -493,6 +512,20 @@ test.describe('Screenshot Capture (Live)', () => {
 
     await page.keyboard.press('Escape');
     await expect(page.locator('#bugdrop-area-picker-overlay')).not.toBeVisible({ timeout: 3_000 });
+  });
+
+  test('full-page capture reaches annotation with a third-party no-CORS image', async ({
+    page,
+  }) => {
+    const host = await openScreenshotOptions(page, 'Live preview no-CORS capture');
+    await addCorsBlockedImage(page);
+
+    const captureBtn = host.locator('css=[data-action="capture"]');
+    await expect(captureBtn).toBeVisible({ timeout: 5_000 });
+    await captureBtn.click();
+
+    await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 30_000 });
+    await expect(host.locator('css=.bd-error-message__text')).not.toBeAttached();
   });
 
   test('annotation undo works on the deployed preview widget', async ({ page }) => {

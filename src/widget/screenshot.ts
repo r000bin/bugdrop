@@ -3,6 +3,8 @@ import { collectMaskRects, applyMaskToImage } from './mask';
 
 const CAPTURE_TIMEOUT_MS = 15_000;
 const DOM_COMPLEXITY_THRESHOLD = 3_000;
+const TRANSPARENT_IMAGE_PLACEHOLDER =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 export const FULL_PAGE_DISABLE_THRESHOLD = 10_000;
 
 type DisplayMediaOptionsWithCurrentTab = DisplayMediaStreamOptions & {
@@ -193,7 +195,8 @@ export async function captureScreenshot(
     htmlToImage.toPng;
 
   const opts = {
-    cacheBust: true,
+    cacheBust: false,
+    imagePlaceholder: TRANSPARENT_IMAGE_PLACEHOLDER,
     pixelRatio,
     filter: (node: HTMLElement) => node.id !== 'bugdrop-host',
   };

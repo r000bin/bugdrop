@@ -2410,6 +2410,25 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     await expect(titleInput).toHaveValue(title);
   }
 
+  async function addCorsBlockedImage(page: Page) {
+    await page.route('https://third-party.test/no-cors-badge.svg', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'image/svg+xml',
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="180" height="44"><rect width="180" height="44" fill="#14b8a6"/><text x="16" y="28" fill="white" font-size="16">No CORS Badge</text></svg>',
+      });
+    });
+
+    await page.evaluate(() => {
+      const img = document.createElement('img');
+      img.alt = 'Third-party badge without CORS headers';
+      img.src = 'https://third-party.test/no-cors-badge.svg';
+      img.style.display = 'block';
+      img.style.margin = '24px';
+      document.body.prepend(img);
+    });
+  }
+
   test('sends custom category label mapping while keeping built-in category UI', async ({
     page,
   }) => {
@@ -2700,6 +2719,8 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     // Verify pixelRatio was reduced to 1 due to complex DOM
     const captureOpts = await page.evaluate(() => (window as any).__captureOpts);
     expect(captureOpts.pixelRatio).toBe(1);
+    expect(captureOpts.cacheBust).toBe(false);
+    expect(captureOpts.imagePlaceholder).toMatch(/^data:image\/gif;base64,/);
   });
 
   test('uses normal pixelRatio on simple pages', async ({ page }) => {
@@ -3721,6 +3742,19 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
 
     const annotationCanvas = page.locator('#bugdrop-host').locator('css=#annotation-canvas');
     await expect(annotationCanvas).toBeVisible({ timeout: 30000 });
+  });
+
+  test('real full-page capture tolerates third-party images without CORS headers', async ({
+    page,
+  }) => {
+    await page.goto('/test/');
+    await addCorsBlockedImage(page);
+
+    await navigateToFullPageCapture(page);
+
+    const host = page.locator('#bugdrop-host');
+    await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 30000 });
+    await expect(host.locator('css=.bd-error-message__text')).not.toBeAttached();
   });
 });
 
