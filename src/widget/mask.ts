@@ -1,4 +1,4 @@
-export interface MaskRect {
+interface MaskRect {
   x: number;
   y: number;
   w: number;
