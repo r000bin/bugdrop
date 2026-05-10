@@ -881,7 +881,8 @@ async function capturePromiseWithLoading(
     const screenshot = await capturePromise;
     loadingModal?.remove();
     return screenshot;
-  } catch (_error) {
+  } catch (error) {
+    console.warn('[BugDrop] Screenshot capture failed:', error);
     loadingModal?.remove();
     const allowSkip = opts?.allowSkip !== false;
 
