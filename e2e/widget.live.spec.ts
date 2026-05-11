@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { test, expect, type Locator, type Page } from '@playwright/test';
 
 /**
@@ -13,6 +14,15 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
 // Add Vercel deployment protection bypass headers only to Vercel requests
 // (not globally, which would cause CORS preflight failures on cross-origin APIs)
 const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+const expectedWidgetOrigin =
+  process.env.EXPECTED_WIDGET_ORIGIN ||
+  (process.env.LIVE_TARGET === 'preview'
+    ? 'https://bugdrop-preview.neonwatty.workers.dev'
+    : process.env.LIVE_TARGET
+      ? 'https://bugdrop.neonwatty.workers.dev'
+      : undefined);
+const expectedWidgetSha256 = process.env.EXPECTED_WIDGET_SHA256;
+
 if (bypassSecret) {
   test.beforeEach(async ({ context }) => {
     await context.route('**/*.vercel.app/**', async route => {
@@ -25,27 +35,8 @@ if (bypassSecret) {
   });
 }
 
-async function mockLiveScreenshotCapture(page: Page) {
-  await page.addInitScript(`window.__bugdropMockToPng = function(el, opts) {
-    window.__captureOpts = opts;
-    var canvas = document.createElement('canvas');
-    var ctx = canvas.getContext('2d');
-    canvas.width = 600;
-    canvas.height = 300;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#111827';
-    ctx.font = '600 18px Arial';
-    ctx.fillText('Live preview undo canvas', 24, 38);
-    ctx.fillStyle = '#e5e7eb';
-    ctx.fillRect(36, 82, 210, 128);
-    ctx.fillRect(354, 82, 210, 128);
-    ctx.fillStyle = '#6b7280';
-    ctx.font = '14px Arial';
-    ctx.fillText('First annotation area', 58, 150);
-    ctx.fillText('Latest annotation area', 374, 150);
-    return Promise.resolve(canvas.toDataURL('image/png'));
-  };`);
+function sha256(buffer: Buffer): string {
+  return createHash('sha256').update(buffer).digest('hex');
 }
 
 async function mockInstalledRepo(page: Page) {
@@ -254,6 +245,15 @@ async function dragOnCanvas(
   await page.mouse.up();
 }
 
+async function expectUsableCanvas(canvas: Locator) {
+  await expect
+    .poll(() => canvas.evaluate(el => (el as HTMLCanvasElement).width))
+    .toBeGreaterThan(0);
+  await expect
+    .poll(() => canvas.evaluate(el => (el as HTMLCanvasElement).height))
+    .toBeGreaterThan(0);
+}
+
 test.describe('Widget Loading (Live)', () => {
   test('widget loads and renders on cross-origin site', async ({ page }) => {
     const errors: string[] = [];
@@ -285,17 +285,28 @@ test.describe('Widget Loading (Live)', () => {
     expect(unexpectedErrors).toHaveLength(0);
   });
 
-  test('widget.js is served from the preview worker', async ({ request }) => {
-    const headers: Record<string, string> = {};
-    if (bypassSecret) {
-      headers['x-vercel-protection-bypass'] = bypassSecret;
+  test('venue loads the expected deployed widget asset', async ({ page, request }) => {
+    await page.goto(process.env.LIVE_TARGET === 'preview' ? '/' : '/test/');
+
+    const widgetSrc = await page.evaluate(() => {
+      return (
+        Array.from(document.scripts)
+          .map(script => script.src)
+          .find(src => src.includes('/widget.js')) || ''
+      );
+    });
+
+    if (expectedWidgetOrigin) {
+      expect(widgetSrc).toContain(`${expectedWidgetOrigin}/widget.js`);
     }
-    const response = await request.get('/', { headers });
+
+    const response = await request.get(widgetSrc);
     expect(response.ok()).toBeTruthy();
 
-    const html = await response.text();
-    // The page should contain a script tag pointing to the bugdrop widget
-    expect(html).toContain('widget.js');
+    if (expectedWidgetSha256) {
+      const body = await response.body();
+      expect(sha256(body)).toBe(expectedWidgetSha256);
+    }
   });
 });
 
@@ -375,9 +386,9 @@ test.describe('Cross-Origin API (Live)', () => {
     // At least one API call should have been made
     expect(apiCalls.length).toBeGreaterThan(0);
 
-    // All API calls should go to the workers.dev domain (not the Vercel domain)
+    // All API calls should go to the expected worker origin (not the Vercel domain)
     for (const url of apiCalls) {
-      expect(url).toContain('workers.dev');
+      expect(url).toContain(expectedWidgetOrigin || 'workers.dev');
     }
   });
 
@@ -529,7 +540,6 @@ test.describe('Screenshot Capture (Live)', () => {
   });
 
   test('annotation undo works on the deployed preview widget', async ({ page }) => {
-    await mockLiveScreenshotCapture(page);
     const host = await openScreenshotOptions(page, 'Live preview annotation undo');
 
     const captureBtn = host.locator('css=[data-action="capture"]');
@@ -539,26 +549,29 @@ test.describe('Screenshot Capture (Live)', () => {
     const canvas = host.locator('css=#annotation-canvas canvas');
     await expect(host.locator('css=.bd-modal--annotator')).toBeVisible({ timeout: 10_000 });
     await expect(canvas).toBeVisible({ timeout: 10_000 });
-    await expect.poll(() => canvas.evaluate(el => (el as HTMLCanvasElement).width)).toBe(600);
+    await expectUsableCanvas(canvas);
+
+    const firstRegion = { left: 0.1, top: 0.18, right: 0.48, bottom: 0.78 };
+    const latestRegion = { left: 0.52, top: 0.18, right: 0.9, bottom: 0.78 };
+    const firstBaseline = await countRedPixelsInRegion(canvas, firstRegion);
+    const latestBaseline = await countRedPixelsInRegion(canvas, latestRegion);
 
     await dragOnCanvas(page, canvas, { x: 0.18, y: 0.28 }, { x: 0.42, y: 0.68 });
     await dragOnCanvas(page, canvas, { x: 0.58, y: 0.28 }, { x: 0.82, y: 0.68 });
 
-    const firstRegion = { left: 0.1, top: 0.18, right: 0.48, bottom: 0.78 };
-    const latestRegion = { left: 0.52, top: 0.18, right: 0.9, bottom: 0.78 };
-
-    expect(await countRedPixelsInRegion(canvas, firstRegion)).toBeGreaterThan(20);
-    expect(await countRedPixelsInRegion(canvas, latestRegion)).toBeGreaterThan(20);
+    expect(await countRedPixelsInRegion(canvas, firstRegion)).toBeGreaterThan(firstBaseline + 20);
+    expect(await countRedPixelsInRegion(canvas, latestRegion)).toBeGreaterThan(latestBaseline + 20);
 
     await host.locator('css=[data-action="undo"]').click();
 
-    expect(await countRedPixelsInRegion(canvas, firstRegion)).toBeGreaterThan(20);
-    expect(await countRedPixelsInRegion(canvas, latestRegion)).toBeLessThan(5);
+    expect(await countRedPixelsInRegion(canvas, firstRegion)).toBeGreaterThan(firstBaseline + 20);
+    await expect
+      .poll(() => countRedPixelsInRegion(canvas, latestRegion))
+      .toBeLessThanOrEqual(latestBaseline + 10);
   });
 
   test('redaction works on the deployed preview widget', async ({ page }) => {
     const payloads = await trackLiveFeedbackPayloads(page);
-    await mockLiveScreenshotCapture(page);
     const host = await openScreenshotOptions(page, 'Live preview redaction');
 
     const captureBtn = host.locator('css=[data-action="capture"]');
@@ -568,7 +581,7 @@ test.describe('Screenshot Capture (Live)', () => {
     const canvas = host.locator('css=#annotation-canvas canvas');
     await expect(host.locator('css=.bd-modal--annotator')).toBeVisible({ timeout: 10_000 });
     await expect(canvas).toBeVisible({ timeout: 10_000 });
-    await expect.poll(() => canvas.evaluate(el => (el as HTMLCanvasElement).width)).toBe(600);
+    await expectUsableCanvas(canvas);
 
     await host.locator('css=[data-tool="redact"]').click();
     await dragOnCanvas(page, canvas, { x: 0.18, y: 0.28 }, { x: 0.42, y: 0.68 });

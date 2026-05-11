@@ -32,7 +32,7 @@ export default defineConfig({
   webServer: process.env.LIVE_TARGET
     ? undefined
     : {
-        command: 'npm run dev',
+        command: 'BUGDROP_TEST_HOOKS=1 npm run build:widget && npm run dev',
         url: 'http://localhost:8787',
         reuseExistingServer: !process.env.CI,
         timeout: 120 * 1000,

@@ -222,28 +222,28 @@ describe('translateMaskRect', () => {
   it('scales a rect by pixelRatio with no origin offset', () => {
     expect(
       translateMaskRect({ x: 10, y: 20, w: 100, h: 50 }, 2, { x: 0, y: 0 }, 1000, 1000)
-    ).toEqual({ x: 20, y: 40, w: 200, h: 100 });
+    ).toEqual({ x: 19, y: 39, w: 202, h: 102 });
   });
 
   it('subtracts originOffset before scaling', () => {
     expect(
       translateMaskRect({ x: 110, y: 220, w: 100, h: 50 }, 2, { x: 100, y: 200 }, 1000, 1000)
-    ).toEqual({ x: 20, y: 40, w: 200, h: 100 });
+    ).toEqual({ x: 19, y: 39, w: 202, h: 102 });
   });
 
   it('clips a rect that overflows the canvas on the right and bottom', () => {
     expect(translateMaskRect({ x: 90, y: 90, w: 30, h: 30 }, 1, { x: 0, y: 0 }, 100, 100)).toEqual({
-      x: 90,
-      y: 90,
-      w: 10,
-      h: 10,
+      x: 89,
+      y: 89,
+      w: 11,
+      h: 11,
     });
   });
 
   it('clips a rect that starts to the left and above the canvas', () => {
     expect(
       translateMaskRect({ x: -10, y: -20, w: 30, h: 50 }, 1, { x: 0, y: 0 }, 100, 100)
-    ).toEqual({ x: 0, y: 0, w: 20, h: 30 });
+    ).toEqual({ x: 0, y: 0, w: 21, h: 31 });
   });
 
   it('returns a non-positive size when fully outside the canvas', () => {
@@ -298,13 +298,12 @@ describe('applyMaskToImage', () => {
   it('paints rects at translated coords (scales by pixelRatio)', async () => {
     // FakeImage: naturalWidth=200, naturalHeight=100 → canvas is 200×100
     // rect {x:5,y:5,w:20,h:10}, pixelRatio=2, originOffset={x:0,y:0}
-    // translateMaskRect: rawX=10, rawY=10, rawW=40, rawH=20
-    // right=min(200,10+40)=50, bottom=min(100,10+20)=30 → no clipping → fillRect(10,10,40,20)
+    // translateMaskRect over-covers by one pixel on each edge to avoid anti-aliased slivers.
     await applyMaskToImage('data:image/png;base64,test', [{ x: 5, y: 5, w: 20, h: 10 }], 2, {
       x: 0,
       y: 0,
     });
-    expect(ctx.fillRect).toHaveBeenCalledWith(10, 10, 40, 20);
+    expect(ctx.fillRect).toHaveBeenCalledWith(9, 9, 42, 22);
   });
 
   it('returns the input dataUrl unchanged when rects is empty', async () => {
@@ -318,13 +317,12 @@ describe('applyMaskToImage', () => {
   it('subtracts originOffset before scaling', async () => {
     // FakeImage: naturalWidth=200, naturalHeight=100 → canvas is 200×100
     // rect {x:105,y:205,w:20,h:10}, pixelRatio=2, originOffset={x:100,y:200}
-    // translateMaskRect: rawX=(105-100)*2=10, rawY=(205-200)*2=10, rawW=40, rawH=20
-    // right=min(200,10+40)=50, bottom=min(100,10+20)=30 → no clipping → fillRect(10,10,40,20)
+    // translateMaskRect over-covers by one pixel on each edge to avoid anti-aliased slivers.
     await applyMaskToImage('data:image/png;base64,test', [{ x: 105, y: 205, w: 20, h: 10 }], 2, {
       x: 100,
       y: 200,
     });
-    expect(ctx.fillRect).toHaveBeenCalledWith(10, 10, 40, 20);
+    expect(ctx.fillRect).toHaveBeenCalledWith(9, 9, 42, 22);
   });
 
   it('skips a rect that translates to non-positive dimensions', async () => {

@@ -5,7 +5,8 @@ interface MaskRect {
   h: number;
 }
 
-const EXPLICIT_SELECTOR = '[data-bugdrop-mask]';
+const EXPLICIT_SELECTOR =
+  '[data-bugdrop-mask], [data-bugdrop-redact], [data-bd-redact], [data-bugdrop-redacted]';
 const DEFAULT_SELECTOR =
   'input[type="password"], input[autocomplete*="cc-number"], input[autocomplete*="cc-csc"], input[autocomplete*="cc-exp"]';
 
@@ -36,6 +37,21 @@ export function collectMaskRects(root: Element): MaskRect[] {
   return rects;
 }
 
+export function countMaskRects(root: Element = document.body, area?: DOMRect): number {
+  const rects = collectMaskRects(root);
+  if (!area) return rects.length;
+  return rects.filter(rect => intersects(rect, area)).length;
+}
+
+function intersects(rect: MaskRect, area: DOMRect): boolean {
+  return (
+    rect.x < area.x + area.width &&
+    rect.x + rect.w > area.x &&
+    rect.y < area.y + area.height &&
+    rect.y + rect.h > area.y
+  );
+}
+
 function walk(node: Element, rects: MaskRect[]): void {
   for (const child of Array.from(node.children)) {
     if (shouldMask(child)) {
@@ -59,10 +75,10 @@ export function translateMaskRect(
   const rawW = rect.w * pixelRatio;
   const rawH = rect.h * pixelRatio;
 
-  const x = Math.max(0, rawX);
-  const y = Math.max(0, rawY);
-  const right = Math.min(canvasWidth, rawX + rawW);
-  const bottom = Math.min(canvasHeight, rawY + rawH);
+  const x = Math.max(0, Math.floor(rawX) - 1);
+  const y = Math.max(0, Math.floor(rawY) - 1);
+  const right = Math.min(canvasWidth, Math.ceil(rawX + rawW) + 1);
+  const bottom = Math.min(canvasHeight, Math.ceil(rawY + rawH) + 1);
 
   return {
     x,

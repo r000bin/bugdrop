@@ -53,14 +53,14 @@ Treat screenshots as unauthenticated user-generated content. The hosted service 
 
 ### Screenshot Format
 
-Screenshots are captured client-side using [html2canvas](https://html2canvas.hertzen.com/), which renders the current page to a canvas element in the user's browser. The canvas is then converted to a PNG image and uploaded. This means:
+Screenshots are captured client-side using [html-to-image](https://github.com/bubkoo/html-to-image), which renders the current page to a canvas element in the user's browser. The canvas is then converted to a PNG image and uploaded. This means:
 
 - The initial screenshot capture is rendered from what the user actually sees
 - No server-side rendering or page access is required
 - The screenshot is generated entirely in the user's browser before being sent to the API
 - Users can redact additional screenshot regions before submitting when using the manual screenshot flow
 
-Manual redaction is user-driven and does not automatically detect sensitive content. It complements, but does not replace, developer-configured masking for fields that should never appear in screenshots, especially when using automatic screenshots.
+Manual redaction is user-driven and does not automatically detect sensitive content. It complements, but does not replace, developer-configured masking for fields that should be visually covered in supported screenshot modes, especially when using automatic screenshots.
 
 Because clients are untrusted, the API validates screenshot uploads server-side before storing them. BugDrop currently accepts PNG data URLs only and rejects SVG, malformed base64, oversized payloads, and data that does not have a PNG file signature.
 
@@ -78,8 +78,7 @@ BugDrop is built with a privacy-first approach:
 
 ### Screenshot masking
 
-You can mark sensitive elements so they never appear in submitted screenshots. Add the
-`data-bugdrop-mask` attribute to any element you want covered:
+You can mark sensitive elements so BugDrop visually covers them in supported screenshot modes. Add the `data-bugdrop-mask` attribute to any element you want covered:
 
 ```html
 <input type="email" data-bugdrop-mask />
@@ -93,6 +92,10 @@ You can mark sensitive elements so they never appear in submitted screenshots. A
 When a user submits feedback, BugDrop paints an opaque rectangle over each tagged
 element's bounding box on the captured PNG before showing the user the annotator
 preview. The user sees what is masked and can audit it before submitting.
+
+Masking is best-effort visual coverage, not a data-loss-prevention or security
+boundary. Users should still review screenshots before submitting when the manual
+screenshot flow is enabled.
 
 **Inheritance.** When an ancestor has `data-bugdrop-mask`, the entire ancestor box is
 masked as a single rectangle. Descendants do not get individual rectangles — this
@@ -121,8 +124,7 @@ prevents gaps from CSS `gap` or non-masked siblings inside a masked container.
 The only network requests BugDrop makes are:
 
 1. Loading the widget script from Cloudflare Workers
-2. Loading html2canvas from cdn.jsdelivr.net (for screenshot functionality)
-3. Submitting the feedback form to the BugDrop Cloudflare Worker API
+2. Submitting the feedback form to the BugDrop Cloudflare Worker API
 
 The API acts as a pass-through to the GitHub API -- it receives the form data, creates the issue and uploads the screenshot, and discards the data. Nothing is persisted on the Cloudflare Worker.
 

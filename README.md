@@ -31,7 +31,7 @@ That's it! Users can now click the bug button to submit feedback as GitHub Issue
 
 > **Important:** Do not add `async` or `defer` to the script tag — the widget needs synchronous loading to read its configuration.
 
-> **CSP note:** If your site uses a Content Security Policy, add `https://cdn.jsdelivr.net` to your `script-src` directive to enable screenshot capture.
+> **CSP note:** If your site uses a Content Security Policy, add `https://bugdrop.neonwatty.workers.dev` to your `script-src` directive to enable the widget.
 
 > **Branch protection:** BugDrop works with repos that have branch protection rules (required PRs, merge queues). Screenshots are stored on a dedicated `bugdrop-screenshots` branch that is auto-created on first use — no manual setup needed.
 
@@ -39,7 +39,7 @@ That's it! Users can now click the bug button to submit feedback as GitHub Issue
 
 ## Features
 
-- 🔒 **Privacy masking** — tag sensitive elements with `data-bugdrop-mask` and BugDrop covers them in the screenshot before it's submitted. Passwords and credit-card inputs are masked automatically.
+- 🔒 **Privacy masking** — tag sensitive elements with `data-bugdrop-mask` and BugDrop visually covers them in supported screenshot modes before submission. Passwords and credit-card inputs are masked automatically.
 
 ## Widget Options
 
@@ -75,7 +75,7 @@ User clicks bug button → Widget captures screenshot → Worker authenticates v
 ```
 
 1. **Widget** loads in a Shadow DOM (isolated from your page styles)
-2. **Screenshot** captured client-side using html2canvas
+2. **Screenshot** captured client-side using html-to-image
 3. **Worker** (Cloudflare) exchanges GitHub App credentials for an installation token
 4. **GitHub API** creates the issue with the screenshot stored in `.bugdrop/` on a dedicated `bugdrop-screenshots` branch (auto-created on first use)
 

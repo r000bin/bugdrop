@@ -32,14 +32,23 @@ const [major, minor, patch] = version.split('.');
 
 console.log(`Building widget version ${version}...`);
 
+const enableTestHooks = process.env.BUGDROP_TEST_HOOKS === '1';
+
 // Build the main widget bundle
 execSync(
-  `npx esbuild src/widget/index.ts --bundle --minify --format=iife --define:__BUGDROP_VERSION__='"${version}"' --outfile=public/widget.js`,
+  `npx esbuild src/widget/index.ts --bundle --minify --format=iife --define:__BUGDROP_VERSION__='"${version}"' --define:__BUGDROP_ENABLE_TEST_HOOKS__=${enableTestHooks ? 'true' : 'false'} --outfile=public/widget.js`,
   { cwd: rootDir, stdio: 'inherit' }
 );
 
 // Create versioned copies
 const widgetPath = join(publicDir, 'widget.js');
+
+if (!enableTestHooks) {
+  const widget = readFileSync(widgetPath, 'utf-8');
+  if (widget.includes('__bugdropMockToPng')) {
+    throw new Error('Production widget build unexpectedly contains test screenshot hook');
+  }
+}
 
 // widget.v{major}.js (e.g., widget.v1.js)
 const majorVersionPath = join(publicDir, `widget.v${major}.js`);

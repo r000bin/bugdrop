@@ -42,9 +42,9 @@ Since BugDrop uses Shadow DOM for isolation, it does not conflict with any frame
 
 ### How does BugDrop handle screenshots?
 
-BugDrop uses [html2canvas](https://html2canvas.hertzen.com/) to capture screenshots entirely on the client side. When a user clicks the screenshot button:
+BugDrop uses [html-to-image](https://github.com/bubkoo/html-to-image) to capture screenshots entirely on the client side. When a user clicks the screenshot button:
 
-1. html2canvas renders the current page to an HTML Canvas element in the user's browser
+1. html-to-image renders the current page to an HTML Canvas element in the user's browser
 2. In optional and required manual screenshot flows, the user can annotate the screenshot and cover sensitive regions with opaque blocks
 3. The canvas is converted to a PNG image
 4. The image is sent to the BugDrop API along with the form submission
@@ -198,7 +198,7 @@ Check the following:
 
 1. **Verify the script tag** -- Make sure it does not have `async` or `defer` attributes
 2. **Check the console** -- Open your browser's developer console and look for `[BugDrop]` messages or errors
-3. **Check CSP** -- If your site uses a Content Security Policy, make sure `https://bugdrop.neonwatty.workers.dev` and `https://cdn.jsdelivr.net` are allowed in `script-src`
+3. **Check CSP** -- If your site uses a Content Security Policy, make sure `https://bugdrop.neonwatty.workers.dev` is allowed in `script-src`
 4. **Check the repo** -- Ensure `data-repo` matches your GitHub repository path exactly (case-sensitive)
 5. **Check app installation** -- Verify the BugDrop GitHub App is installed on the repository
 
@@ -216,8 +216,8 @@ If the widget appears but submissions fail:
 If issues are created but without screenshots:
 
 1. **Check branch protection** -- The GitHub App needs permission to push to the `bugdrop-screenshots` branch. See the [Installation](/docs/installation) page for details on branch protection configuration.
-2. **Check CSP** -- The html2canvas library is loaded from `cdn.jsdelivr.net`. Make sure it is allowed by your Content Security Policy.
-3. **Cross-origin content** -- html2canvas cannot capture cross-origin iframes or images loaded without CORS headers. These elements may appear blank in the screenshot.
+2. **Check CSP** -- Make sure your Content Security Policy allows the BugDrop widget script.
+3. **Cross-origin content** -- Browser screenshot rendering cannot capture cross-origin iframes or images loaded without CORS headers. These elements may appear blank in the screenshot.
 
 ### Can I use BugDrop on a static site?
 

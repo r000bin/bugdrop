@@ -73,8 +73,9 @@ See the [Configuration](/docs/configuration) and [Styling](/docs/styling) docs f
 
 ## Protecting sensitive data
 
-If your page renders customer data, billing details, or any other content you do not
-want to appear in submitted screenshots, mark those elements with `data-bugdrop-mask`:
+If your page renders customer data, billing details, or any other content you want
+BugDrop to visually cover in supported screenshot modes, mark those elements with
+`data-bugdrop-mask`:
 
 ```html
 <div class="customer-row" data-bugdrop-mask>
@@ -82,7 +83,7 @@ want to appear in submitted screenshots, mark those elements with `data-bugdrop-
 </div>
 ```
 
-BugDrop covers each marked element with an opaque rectangle on the captured screenshot.
+BugDrop covers each marked element with an opaque rectangle on supported captured screenshots.
 Password inputs and credit-card autocomplete fields are masked automatically. See
 [Screenshot masking](/security#screenshot-masking) on the Security page for details.
 
@@ -107,13 +108,13 @@ The BugDrop script tag should **not** include the `async` or `defer` attributes.
 
 ### Content Security Policy (CSP)
 
-If your site uses a Content Security Policy, you will need to allow `cdn.jsdelivr.net` in your CSP directives. BugDrop loads the html2canvas library from jsDelivr for screenshot functionality:
+If your site uses a Content Security Policy, allow the BugDrop worker domain in your CSP directives:
 
 ```
-Content-Security-Policy: script-src 'self' https://bugdrop.neonwatty.workers.dev https://cdn.jsdelivr.net;
+Content-Security-Policy: script-src 'self' https://bugdrop.neonwatty.workers.dev;
 ```
 
-If you have a strict CSP, make sure both the BugDrop worker domain and jsDelivr are included in your `script-src` directive.
+If you have a strict CSP, make sure the BugDrop worker domain is included in your `script-src` directive.
 
 ### Branch Protection and the Screenshots Branch
 

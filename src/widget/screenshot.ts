@@ -1,5 +1,8 @@
 import * as htmlToImage from 'html-to-image';
-import { collectMaskRects, applyMaskToImage } from './mask';
+import type { Options as HtmlToImageOptions } from 'html-to-image/lib/types';
+import { applyMaskToImage, collectMaskRects, countMaskRects } from './mask';
+
+declare const __BUGDROP_ENABLE_TEST_HOOKS__: boolean;
 
 const CAPTURE_TIMEOUT_MS = 15_000;
 const DOM_COMPLEXITY_THRESHOLD = 3_000;
@@ -18,6 +21,7 @@ type VideoElementWithFrameCallback = HTMLVideoElement & {
 declare global {
   interface Window {
     __bugdropMockViewportCapture?: () => Promise<string>;
+    __bugdropMockToPng?: typeof htmlToImage.toPng;
   }
 }
 
@@ -190,11 +194,8 @@ export async function captureScreenshot(
 
   const pixelRatio = getPixelRatio(isFullPage, screenshotScale);
 
-  const toPng =
-    (window as unknown as { __bugdropMockToPng?: typeof htmlToImage.toPng }).__bugdropMockToPng ??
-    htmlToImage.toPng;
-
-  const opts = {
+  const toPng = getToPng();
+  const opts: HtmlToImageOptions = {
     cacheBust: false,
     imagePlaceholder: TRANSPARENT_IMAGE_PLACEHOLDER,
     pixelRatio,
@@ -211,6 +212,48 @@ export async function captureScreenshot(
   const capturePromise = toPng(target as HTMLElement, opts);
   const dataUrl = await withCaptureTimeout(capturePromise);
   return applyMaskToImage(dataUrl, rects, pixelRatio, originOffset);
+}
+
+export async function captureAreaScreenshot(
+  rect: DOMRect,
+  screenshotScale?: number
+): Promise<string> {
+  const pixelRatio = getPixelRatio(true, screenshotScale);
+  const toPng = getToPng();
+  const opts: HtmlToImageOptions = {
+    cacheBust: false,
+    imagePlaceholder: TRANSPARENT_IMAGE_PLACEHOLDER,
+    pixelRatio,
+    width: rect.width,
+    height: rect.height,
+    style: {
+      transform: `translate(${-rect.x}px, ${-rect.y}px)`,
+      transformOrigin: 'top left',
+      width: `${document.documentElement.scrollWidth}px`,
+      height: `${document.documentElement.scrollHeight}px`,
+    },
+    filter: (node: HTMLElement) => node.id !== 'bugdrop-host',
+  };
+
+  const dataUrl = await withCaptureTimeout(toPng(document.body, opts));
+  return applyMaskToImage(dataUrl, collectMaskRects(document.body), pixelRatio, {
+    x: rect.x,
+    y: rect.y,
+  });
+}
+
+export function getRedactionCount(element?: Element, rect?: DOMRect): number {
+  return countMaskRects(element ?? document.body, rect);
+}
+
+function getToPng(): typeof htmlToImage.toPng {
+  if (
+    (typeof __BUGDROP_ENABLE_TEST_HOOKS__ === 'undefined' || __BUGDROP_ENABLE_TEST_HOOKS__) &&
+    window.__bugdropMockToPng
+  ) {
+    return window.__bugdropMockToPng;
+  }
+  return htmlToImage.toPng;
 }
 
 export async function cropScreenshot(

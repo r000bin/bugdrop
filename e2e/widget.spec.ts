@@ -2202,6 +2202,20 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     }`;
   }
 
+  function redactionAwarePng() {
+    return `function(el, opts) {
+      window.__captureOpts = opts;
+      var canvas = document.createElement('canvas');
+      var pixelRatio = opts && opts.pixelRatio ? opts.pixelRatio : 1;
+      canvas.width = Math.max(1, Math.ceil((opts && opts.width ? opts.width : document.documentElement.scrollWidth) * pixelRatio));
+      canvas.height = Math.max(1, Math.ceil((opts && opts.height ? opts.height : document.documentElement.scrollHeight) * pixelRatio));
+      var ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      return Promise.resolve(canvas.toDataURL('image/png'));
+    }`;
+  }
+
   function mockGetDisplayMedia(page: Page, body: string) {
     return page.addInitScript(`
       Object.defineProperty(navigator, 'mediaDevices', {
@@ -2883,7 +2897,17 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
         configurable: true,
       });
     });
-    await page.goto('/test/complex-dom.html?nodes=12000');
+    await page.goto('/test/redaction.html');
+    await page.evaluate(() => {
+      const root = document.createElement('div');
+      root.id = 'complexity-padding';
+      for (let i = 0; i < 12000; i++) {
+        const node = document.createElement('span');
+        node.textContent = `Item ${i}`;
+        root.appendChild(node);
+      }
+      document.body.appendChild(root);
+    });
 
     const nodeCount = await page.evaluate(() => document.body.querySelectorAll('*').length);
     expect(nodeCount).toBeGreaterThanOrEqual(10000);
@@ -2949,11 +2973,20 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     await expect(host.locator('css=[data-action="capture"]')).not.toBeAttached();
     await expect(host.locator('css=[data-action="area"]')).not.toBeAttached();
     await expect(host.locator('css=p >> text=visible viewport')).toBeVisible();
+    await expect(host.locator('css=.bd-redaction-note')).toContainText(
+      'Browser viewport capture cannot apply automatic private-field masks'
+    );
 
     await viewportBtn.click();
 
     await expect(host.locator('css=.bd-modal--annotator')).toBeVisible({ timeout: 10000 });
     await expect(host.locator('css=#annotation-canvas canvas')).toBeVisible();
+    await expect(host.locator('css=.bd-redaction-note')).toContainText(
+      'could not apply automatic private-field masks'
+    );
+    await expect(host.locator('css=.bd-redaction-note')).not.toContainText(
+      'private item was marked for redaction'
+    );
     await expect
       .poll(() =>
         page.evaluate(
@@ -3260,6 +3293,58 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
 
     // Complexity notice should NOT be shown
     await expect(host.locator('css=p >> text=too complex')).not.toBeAttached();
+  });
+
+  test('communicates developer redactions for full-page screenshots', async ({ page }) => {
+    await mockHtmlToImage(page, redactionAwarePng());
+    await page.goto('/test/redaction.html');
+
+    const host = await navigateToScreenshotOptions(page);
+    await expect(host.locator('css=.bd-redaction-note')).toContainText(
+      'marked some fields for redaction'
+    );
+
+    await host.locator('css=[data-action="capture"]').click();
+
+    await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 10000 });
+    await expect(host.locator('css=.bd-redaction-note')).toContainText(
+      '1 private item was marked for redaction'
+    );
+    await expect(page.locator('#redacted-test-input')).toHaveValue('sk_live_local_test_secret');
+  });
+
+  test('communicates developer redactions for selected-area screenshots', async ({ page }) => {
+    await mockHtmlToImage(page, redactionAwarePng());
+    await page.goto('/test/redaction.html');
+    await page.locator('#redacted-test-input').scrollIntoViewIfNeeded();
+
+    const host = await navigateToScreenshotOptions(page);
+    await host.locator('css=[data-action="area"]').click();
+    await expect(page.locator('#bugdrop-area-picker-overlay')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('#bugdrop-area-picker-tooltip')).toContainText(
+      'Marked private fields may be masked if included'
+    );
+
+    const box = await page.locator('#redacted-test-input').boundingBox();
+    expect(box).toBeTruthy();
+
+    await page.mouse.move(box!.x - 8, box!.y - 8);
+    await page.mouse.down();
+    await page.mouse.move(box!.x + box!.width + 8, box!.y + box!.height + 8);
+    await page.mouse.up();
+
+    await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 10000 });
+    await expect(host.locator('css=.bd-redaction-note')).toContainText(
+      '1 private item was marked for redaction'
+    );
+
+    const captureOpts = await page.evaluate(
+      () =>
+        (window as Window & { __captureOpts?: { width?: number; height?: number } }).__captureOpts
+    );
+    expect(captureOpts?.width).toBeGreaterThan(100);
+    expect(captureOpts?.height).toBeGreaterThan(40);
+    await expect(page.locator('#redacted-test-input')).toHaveValue('sk_live_local_test_secret');
   });
 
   test('annotation modal gives issue #117 style previews enough readable width', async ({
@@ -3833,6 +3918,22 @@ test.describe('Screenshot Mode Configuration', () => {
     ).toBe(1);
   });
 
+  test('auto mode warns users about automatic full-page screenshots', async ({ page }) => {
+    await setupInstalledApp(page);
+    await mockSuccessfulCapture(page);
+    await setupSuccessfulSubmit(page);
+
+    await page.goto('/test/redaction.html?screenshot=auto');
+    const host = await openForm(page);
+
+    await expect(host.locator('css=form')).toContainText(
+      'This site will attach a full-page screenshot when you submit'
+    );
+    await expect(host.locator('css=form')).toContainText(
+      'unmarked sensitive information can still be included'
+    );
+  });
+
   test('auto mode skips full-page capture on very complex pages', async ({ page }) => {
     await setupInstalledApp(page);
     await mockSuccessfulCapture(page);
@@ -4053,6 +4154,19 @@ test.describe('Screenshot Masking', () => {
     );
 
     const rect = await docRectOf(page, '#customer-panel');
+    const cx = Math.floor((rect.x + rect.w / 2) * pixelRatio);
+    const cy = Math.floor((rect.y + rect.h / 2) * pixelRatio);
+
+    expect(await pixelAt(page, screenshot, cx, cy)).toEqual([0, 0, 0, 255]);
+  });
+
+  test('masks elements tagged with data-bugdrop-redact', async ({ page }) => {
+    const { screenshot, pixelRatio } = await submitFeedbackWithFullPageCapture(
+      page,
+      '/test/redaction.html'
+    );
+
+    const rect = await docRectOf(page, '#redacted-test-input');
     const cx = Math.floor((rect.x + rect.w / 2) * pixelRatio);
     const cy = Math.floor((rect.y + rect.h / 2) * pixelRatio);
 

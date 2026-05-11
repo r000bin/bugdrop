@@ -3,16 +3,25 @@ import { resolvePickerStyle } from './picker';
 
 const MIN_SELECTION_SIZE = 10;
 const AREA_PICKER_INSTRUCTION = 'Draw a selection around the area to capture (ESC to cancel)';
+const AREA_PICKER_REDACTION_INSTRUCTION =
+  'Draw a selection around the area to capture. Marked private fields may be masked if included. (ESC to cancel)';
 
-export function createAreaPicker(style?: PickerStyle): Promise<DOMRect | null> {
+export function createAreaPicker(
+  style?: PickerStyle,
+  opts?: { redactionsAvailable?: boolean }
+): Promise<DOMRect | null> {
   return new Promise(resolve => {
     setTimeout(() => {
-      startAreaPicker(resolve, style);
+      startAreaPicker(resolve, style, opts);
     }, 50);
   });
 }
 
-function startAreaPicker(resolve: (rect: DOMRect | null) => void, style?: PickerStyle): void {
+function startAreaPicker(
+  resolve: (rect: DOMRect | null) => void,
+  style?: PickerStyle,
+  opts?: { redactionsAvailable?: boolean }
+): void {
   const { accent, fontFamily, radius, bw, tooltipBg, tooltipText, tooltipBorder } =
     resolvePickerStyle(style);
 
@@ -65,7 +74,9 @@ function startAreaPicker(resolve: (rect: DOMRect | null) => void, style?: Picker
     border: ${bw}px solid ${tooltipBorder};
     pointer-events: none;
   `;
-  tooltip.textContent = AREA_PICKER_INSTRUCTION;
+  tooltip.textContent = opts?.redactionsAvailable
+    ? AREA_PICKER_REDACTION_INSTRUCTION
+    : AREA_PICKER_INSTRUCTION;
   document.body.appendChild(tooltip);
 
   let startX = 0;

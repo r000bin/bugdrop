@@ -218,7 +218,27 @@ Control how screenshots are collected during the feedback flow.
 - **`auto`** -- Automatically captures a full-page screenshot after the form is submitted, without showing the manual screenshot picker or redaction step.
 - **`required`** -- Requires a screenshot before submission. Users can choose full page, element, or area, then annotate or redact before submitting.
 
-Manual redaction is controlled by the person submitting feedback. Use developer-configured masking for fields that should never appear in screenshots, especially with automatic screenshots.
+Manual redaction is controlled by the person submitting feedback. Use developer-configured masking for fields that should be visually covered in supported screenshot modes, especially with automatic screenshots. Auto mode warns users that a full-page screenshot will be attached, but it does not show the manual picker or annotation review step.
+
+### Developer-configured screenshot masking
+
+BugDrop can visually mask fields that your app marks as private before a screenshot is uploaded:
+
+```html
+<input data-bugdrop-redact value="sk_live_..." />
+<section data-bugdrop-mask>Private account details</section>
+```
+
+Supported attributes:
+
+- `data-bugdrop-redact`
+- `data-bd-redact`
+- `data-bugdrop-redacted`
+- `data-bugdrop-mask`
+
+This is best-effort visual masking, not a data-loss-prevention or security boundary. BugDrop can only mask content it can measure in the page DOM. Unmarked sensitive information can still appear, and browser rendering limits can apply to canvas, image, video, iframe, SVG, shadow DOM, pseudo-element, and highly custom control content.
+
+Selected-area screenshots are rendered to the selected dimensions and masks are translated into that crop, but the capture still runs client-side against the page DOM. Avoid screenshots entirely for pages where client-side screenshot rendering is unacceptable.
 
 ```html
 <!-- Automatically attach a full-page screenshot -->

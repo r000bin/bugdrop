@@ -1,11 +1,11 @@
 import {
   beginViewportCapture,
   canCaptureViewportNatively,
+  captureAreaScreenshot,
   captureScreenshot,
-  cropScreenshot,
   FULL_PAGE_DISABLE_THRESHOLD,
   getDomNodeCount,
-  getPixelRatio,
+  getRedactionCount,
   isFullPageDisabled,
 } from './screenshot';
 import { createElementPicker } from './picker';
@@ -762,6 +762,8 @@ async function openFeedbackFlow(
 
     let screenshot: string | null = null;
     let elementSelector: string | null = null;
+    let redactionCount = 0;
+    let redactionUnavailable = false;
     let returnToForm = false;
 
     // Step 3: Screenshot flow (if configured/user opted in)
@@ -772,6 +774,7 @@ async function openFeedbackFlow(
           returnToForm = true;
         } else {
           screenshot = result;
+          redactionCount = screenshot ? getRedactionCount() : 0;
         }
       }
     } else if (formResult.includeScreenshot) {
@@ -779,6 +782,8 @@ async function openFeedbackFlow(
       while (true) {
         screenshot = null;
         elementSelector = null;
+        redactionCount = 0;
+        redactionUnavailable = false;
 
         const screenshotChoice = await showScreenshotOptions(root, {
           allowSkip: !screenshotRequired,
@@ -819,6 +824,8 @@ async function openFeedbackFlow(
           }
           if (!result && !screenshotRequired) rememberComplexScreenshotSkip(config, formResult);
           screenshot = result;
+          redactionUnavailable = Boolean(screenshot);
+          redactionCount = 0;
         } else if (screenshotChoice === 'capture') {
           const result = await captureWithLoading(root, undefined, config.screenshotScale, {
             allowSkip: !screenshotRequired,
@@ -829,6 +836,7 @@ async function openFeedbackFlow(
           }
           if (!result) rememberComplexScreenshotSkip(config, formResult);
           screenshot = result;
+          redactionCount = screenshot ? getRedactionCount() : 0;
         } else if (screenshotChoice === 'element') {
           const element = await createElementPicker(pickerStyle);
           if (element) {
@@ -841,28 +849,32 @@ async function openFeedbackFlow(
             }
             if (!result) rememberComplexScreenshotSkip(config, formResult);
             screenshot = result;
+            redactionCount = screenshot ? getRedactionCount(element) : 0;
             elementSelector = getElementSelector(element);
           }
         } else if (screenshotChoice === 'area') {
-          const rect = await createAreaPicker(pickerStyle);
+          const rect = await createAreaPicker(pickerStyle, {
+            redactionsAvailable: getRedactionCount() > 0,
+          });
           if (rect) {
-            const pixelRatio = getPixelRatio(true, config.screenshotScale);
-            const fullPage = await captureWithLoading(root, undefined, config.screenshotScale, {
+            const result = await captureAreaWithLoading(root, rect, config.screenshotScale, {
               allowSkip: !screenshotRequired,
             });
-            if (fullPage === 'cancel') {
+            if (result === 'cancel') {
               returnToForm = true;
               break;
             }
-            if (fullPage) {
-              screenshot = await cropScreenshot(fullPage, rect, pixelRatio);
-            }
+            if (!result) rememberComplexScreenshotSkip(config, formResult);
+            screenshot = result;
+            redactionCount = screenshot ? getRedactionCount(undefined, rect) : 0;
           }
         }
 
         // Step 4: Annotate (if screenshot exists)
         if (screenshot) {
-          const result = await showAnnotationStep(root, screenshot);
+          const result = await showAnnotationStep(root, screenshot, redactionCount, {
+            redactionUnavailable,
+          });
           if (result === 'retake') continue;
           if (result === 'cancel') {
             returnToForm = true;
@@ -904,6 +916,20 @@ async function captureWithLoading(
     root,
     captureScreenshot(element, screenshotScale),
     () => captureScreenshot(element, screenshotScale),
+    opts
+  );
+}
+
+async function captureAreaWithLoading(
+  root: HTMLElement,
+  rect: DOMRect,
+  screenshotScale?: number,
+  opts?: { allowSkip?: boolean }
+): Promise<string | null | 'cancel'> {
+  return capturePromiseWithLoading(
+    root,
+    captureAreaScreenshot(rect, screenshotScale),
+    () => captureAreaScreenshot(rect, screenshotScale),
     opts
   );
 }
@@ -1228,9 +1254,13 @@ function getScreenshotFormControl(
   initialValues?: FeedbackFormResult | null
 ): string {
   if (config.screenshotMode === 'auto') {
+    const redactionNote =
+      getRedactionCount() > 0
+        ? ' Some fields this site marked private may be visually masked on supported pages, but unmarked sensitive information can still be included.'
+        : '';
     return `
       <p style="margin: 8px 0 0; color: var(--bd-text-secondary); font-size: 0.95rem;">
-        📸 A screenshot will be attached automatically without preview or manual redaction.
+        This site will attach a full-page screenshot when you submit without showing a preview. Review your page for sensitive information before sending.${redactionNote}
       </p>
     `;
   }
@@ -1280,6 +1310,12 @@ function showScreenshotOptions(
   const fullPageDisabled = isFullPageDisabled();
   const nativeViewportAvailable = fullPageDisabled && canCaptureViewportNatively();
   const allowSkip = opts?.allowSkip !== false;
+  const redactionNote =
+    nativeViewportAvailable && fullPageDisabled
+      ? '<p class="bd-redaction-note" style="margin: 0 0 12px; padding: 8px 12px; background: var(--bd-warning-bg, #fff8e1); border-radius: 6px; font-size: 13px; color: var(--bd-text-secondary);">Browser viewport capture cannot apply automatic private-field masks. Select Element to preserve automatic masking, or review and cover sensitive areas before sending.</p>'
+      : getRedactionCount() > 0
+        ? '<p class="bd-redaction-note" style="margin: 0 0 12px; padding: 8px 12px; background: var(--bd-warning-bg, #fff8e1); border-radius: 6px; font-size: 13px; color: var(--bd-text-secondary);">This site marked some fields for redaction. Review the screenshot before sending.</p>'
+        : '';
 
   return new Promise(resolve => {
     const complexNote = fullPageDisabled
@@ -1297,6 +1333,7 @@ function showScreenshotOptions(
       `
         <p style="margin: 0 0 16px; color: var(--bd-text-secondary);">Choose what to capture:</p>
         ${complexNote}
+        ${redactionNote}
         <div class="bd-actions bd-screenshot-actions">
           ${primaryCaptureButton}
           ${fullPageDisabled ? '' : '<button class="bd-btn bd-btn-secondary" data-action="area">Select Area</button>'}
@@ -1348,15 +1385,23 @@ function showScreenshotOptions(
 
 function showAnnotationStep(
   root: HTMLElement,
-  screenshot: string
+  screenshot: string,
+  redactionCount = 0,
+  opts?: { redactionUnavailable?: boolean }
 ): Promise<string | 'retake' | 'cancel'> {
   return new Promise(resolve => {
+    const redactionNote = opts?.redactionUnavailable
+      ? `<p class="bd-redaction-note" style="margin: 0 0 12px; padding: 8px 12px; background: var(--bd-warning-bg, #fff8e1); border-radius: 6px; font-size: 13px; color: var(--bd-text-secondary);">This browser viewport capture could not apply automatic private-field masks. Review and cover any sensitive areas before sending.</p>`
+      : redactionCount > 0
+        ? `<p class="bd-redaction-note" style="margin: 0 0 12px; padding: 8px 12px; background: var(--bd-warning-bg, #fff8e1); border-radius: 6px; font-size: 13px; color: var(--bd-text-secondary);">${redactionCount} private ${redactionCount === 1 ? 'item was' : 'items were'} marked for redaction in this screenshot. Review before sending.</p>`
+        : '';
     const modal = createModal(
       root,
       'Review Screenshot',
       `
+        ${redactionNote}
         <p style="margin: 0 0 12px; color: var(--bd-text-secondary); font-size: 13px;">
-          Cover sensitive areas before submitting. Redactions are baked into the uploaded image.
+          Check that no sensitive information is visible before sending. Cover sensitive areas before submitting. Redactions are baked into the uploaded image.
         </p>
         <div class="bd-tools">
           <button class="bd-tool active" data-tool="draw">✏️ Draw</button>
